@@ -1,0 +1,11 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+*.db
+*.opendb
+/GargNayarRainRemoval/x64/Debug/GargNaya.F48CFDE3.tlog
+/GargNayarRainRemoval/x64/Debug
+/GargNayarRainRemoval/x64/Release/GargNaya.F48CFDE3.tlog
+/x64/Release
+*.sdf
