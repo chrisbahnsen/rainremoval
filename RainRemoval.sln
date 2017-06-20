@@ -1,26 +1,50 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GargNayarRainRemoval", "GargNayarRainRemoval\GargNayarRainRemoval.vcxproj", "{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}"
 EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PixelRainGauge", "PixelRainGauge\PixelRainGauge.pyproj", "{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BossuRainGauge", "BossuRainGauge\BossuRainGauge.vcxproj", "{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Debug|Any CPU.ActiveCfg = Debug|Win32
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Debug|x64.ActiveCfg = Debug|x64
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Debug|x64.Build.0 = Debug|x64
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Debug|x86.ActiveCfg = Debug|Win32
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Debug|x86.Build.0 = Debug|Win32
+		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Release|Any CPU.ActiveCfg = Release|Win32
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Release|x64.ActiveCfg = Release|x64
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Release|x64.Build.0 = Release|x64
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Release|x86.ActiveCfg = Release|Win32
 		{F48CFDE3-E21A-49FC-B233-6EF78B0A31F6}.Release|x86.Build.0 = Release|Win32
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Release|x64.ActiveCfg = Release|Any CPU
+		{AFE6B7B8-DA3A-4FBF-A3CF-9F8CBCD8E09B}.Release|x86.ActiveCfg = Release|Any CPU
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Debug|x64.ActiveCfg = Debug|x64
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Debug|x64.Build.0 = Debug|x64
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Debug|x86.ActiveCfg = Debug|Win32
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Debug|x86.Build.0 = Debug|Win32
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Release|Any CPU.ActiveCfg = Release|Win32
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Release|x64.ActiveCfg = Release|x64
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Release|x64.Build.0 = Release|x64
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Release|x86.ActiveCfg = Release|Win32
+		{A02CAADE-AB20-4FB5-A6CE-B29E18B461A5}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
