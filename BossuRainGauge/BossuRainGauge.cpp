@@ -215,7 +215,6 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	// the position of the median to calculate the mean, std.dev and proportion estimate
 	double sumAboveMedian = 0, observationSum = 0;
 	double initialStdDev = 0;
-	double initialMixtureProportion = 0;
 	double totalSum = 0;
 
 
@@ -234,4 +233,13 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 
 	initialStdDev = sqrt(sumOfSqDiffToMean / observationSum);
 
+	// Use the observationSum / 180 to estimate the mixture proportion
+	double uniformDistEstimate = observationSum / histogram.size(); 
+	double initialMixtureProportion = 0;
+
+	for (auto i = median; i < histogram.size(); ++i) {
+		initialMixtureProportion += (1 - (uniformDistEstimate / histogram[i]) * histogram[i]);
+	}
+
+	initialMixtureProportion = initialMixtureProportion / observationSum;
 }
