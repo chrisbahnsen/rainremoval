@@ -34,6 +34,9 @@
 #include "BossuRainGauge.h"
 
 
+using namespace std;
+using namespace cv;
+
 int main()
 {
     return 0;
@@ -242,4 +245,16 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	}
 
 	initialMixtureProportion = initialMixtureProportion / observationSum;
+
+	// Now that we have the initial values, we may start the EM algorithm
+	vector<double> mixtureProportion{ initialMixtureProportion };
+	vector<double> gaussianMean{ initialMean };
+	vector<double> gaussianStdDev{ initialStdDev };
+	vector<double> z{ 0 };
+
+	for (auto i = 1; i < rainParams.emMaxIterations; ++i) {
+		// Expectation step
+
+		zk = ((1. - mixtureProportion.back()) * ) / 
+	}
 }

@@ -64,8 +64,6 @@
 //		   segmented BLOBs)
 // 
 
-using namespace std;
-using namespace cv;
 
 #include <opencv2\opencv.hpp>
 #include <Windows.h>
@@ -79,6 +77,9 @@ struct BossuRainParameters {
 
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
 	double dm;
+
+	// Maximum number of iterations for the Expectation-Maximization algorithm
+	int emMaxIterations;
 
 	// Options
 	bool saveOverviewImg;
@@ -104,6 +105,9 @@ private:
 		double& gaussianMean,
 		double& gaussianStdDev,
 		double& gaussianMixtureProportion);
+
+	double uniformDist(double start, double end, double pos);
+	double gaussianDist(double mean, double stdDev, double pos);
 
 	std::string inputVideo, outputFolder;
 
