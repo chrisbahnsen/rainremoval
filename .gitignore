@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
@@ -9,3 +9,4 @@
 /GargNayarRainRemoval/x64/Release/GargNaya.F48CFDE3.tlog
 /x64/Release
 *.sdf
+BossuRainGauge/x64/
