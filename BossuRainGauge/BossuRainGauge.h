@@ -48,7 +48,7 @@
 //		   whose mass is added to the histogram of orientation. This histogram is 
 //		   named "Histogram of Orientation of Streaks" in the original article
 // 5. Model the accumulated histogram using a mixture distribution of 1 Gaussian
-//    and 1 uniform distribution in the range [0-180] degrees. 
+//    and 1 uniform distribution in the range [0-179] degrees. 
 //		a) Use an Expectation-Maximization scheme to estimate the mixture 
 //		   distribution. 
 //		   (Maybe use the built-in OpenCV EM class? There are indications that 
@@ -64,6 +64,8 @@
 //		   segmented BLOBs)
 // 
 
+#include <iostream>
+#include <fstream>
 
 #include <opencv2\opencv.hpp>
 #include <Windows.h>
@@ -75,15 +77,17 @@ struct BossuRainParameters {
 	// Maximum BLOB size of connected component in order to classify as rain pixel
 	int maximumBlobSize;
 
+	// Minimum BLOB size of connected component in order to classify as rain pixel
+	int minimumBlobSize; // TODO: Implement this
+
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
-	double dm;
+	vector<double> dm;
 
 	// Maximum number of iterations for the Expectation-Maximization algorithm
 	int emMaxIterations;
 
 	// Options
-	bool saveOverviewImg;
-	bool saveDiffImg;
+	bool saveDebugImg;
 	bool verbose;
 
 	
@@ -95,19 +99,31 @@ public:
 
 	int detectRain();
 
-private:
+	static BossuRainParameters loadParameters(std::string filePath);
+	int saveParameters(std::string filePath);
+
 	static BossuRainParameters getDefaultParameters();
 
+private:
+
 	void computeOrientationHistogram(const std::vector<std::vector<cv::Point> >& contours, 
-		std::vector<double>& histogram);
+		std::vector<double>& histogram, double dm);
 	void estimateGaussianUniformMixtureDistribution(const std::vector<double>& histogram,
 		int numberOfObservations,
 		double& gaussianMean,
 		double& gaussianStdDev,
 		double& gaussianMixtureProportion);
+	void plotDistributions(const std::vector<double>& histogram,
+		const double gaussianMean,
+		const double gaussianStdDev,
+		const double gaussianMixtureProportion,
+		const double kalmanGaussianMean,
+		const double kalmanGaussianStdDev,
+		const double kalmanGaussianMixtureProportion);
 
-	double uniformDist(double start, double end, double pos);
+	double uniformDist(double a, double b, double pos);
 	double gaussianDist(double mean, double stdDev, double pos);
+	
 
 	std::string inputVideo, outputFolder;
 
