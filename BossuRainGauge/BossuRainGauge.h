@@ -81,7 +81,7 @@ struct BossuRainParameters {
 	int minimumBlobSize; // TODO: Implement this
 
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
-	vector<double> dm;
+	std::vector<double> dm;
 
 	// Maximum number of iterations for the Expectation-Maximization algorithm
 	int emMaxIterations;
