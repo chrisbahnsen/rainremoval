@@ -94,6 +94,7 @@ int BossuRainIntensityMeasurer::detectRain()
 		
 		while (cap.grab()) {
 			// Continue while there are frames to retrieve
+			cap.retrieve(frame);
 			
 			backgroundSubtractor->apply(frame, foregroundMask);
 			backgroundSubtractor->getBackgroundImage(backgroundImage);
@@ -104,25 +105,29 @@ int BossuRainIntensityMeasurer::detectRain()
 			// Operate on grayscale images from now on
 			Mat grayForegroundImage, grayBackgroundImage;
 			cvtColor(foregroundImage, grayForegroundImage, COLOR_BGR2GRAY);
-			cvtColor(backgroundImage, grayForegroundImage, COLOR_BGR2GRAY);
+			cvtColor(backgroundImage, grayBackgroundImage, COLOR_BGR2GRAY);
 
 			// Use the Garg-Nayar intensity constraint to select candidate rain pixels
-			Mat diffImg = grayForegroundImage - grayForegroundImage;
+			Mat diffImg = grayForegroundImage - grayBackgroundImage;
 			Mat candidateRainMask;
 
 			
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
-			cout << "Channels fgMask: " << grayForegroundImage.channels() << ", channels diffImg: " << diffImg.channels() << ", channels bgImage: " <<grayBackgroundImage.channels() << endl;
 
 			// We now have the candidate rain pixels. Use connected component analysis
 			// to filter out large connected components
 			vector<vector<Point> > contours, filteredContours; 
 
 			if (rainParams.saveDebugImg) {
-				imshow("Background image", backgroundImage);
-				imshow("Foreground mask", foregroundMask);
+				imshow("Image", frame);
+				imwrite("backgroundImg.png", backgroundImage);
+				imshow("Foreground image", grayForegroundImage);
+				imwrite("foregroundImage.png", grayForegroundImage);
 				imshow("Difference image", diffImg);
+				imwrite("diffImg.png", diffImg);
 				imshow("Candidate rain pixels", candidateRainMask);
+				imwrite("Candidate.png", candidateRainMask);
+
 				waitKey(0);
 
 				cout << "Sum of non-zero in candidateRainMask" << cv::countNonZero(candidateRainMask) << endl;
@@ -132,23 +137,26 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			for (auto dmVal : rainParams.dm) {
 				Mat filteredCandidateMask = candidateRainMask.clone();
+				int deletedContours = 0;
 
 				for (auto contour : contours) {
 					if ((contour.size() > rainParams.maximumBlobSize) ||
 						(contour.size() < rainParams.minimumBlobSize)) {
-						// Delete the contour from the rain image
-						if (rainParams.verbose) {
-							std::cout << "Deleting contour of size " << contour.size();
-						}
-
+						
 						for (auto point : contour) {
 							filteredCandidateMask.at<uchar>(point.y, point.x) = 0;
 						}
+						deletedContours++;
 					}
 					else {
 						// Retain the contour if below or equal to the size threshold
 						filteredContours.push_back(contour);
 					}
+				}
+
+				// Delete the contour from the rain image
+				if (rainParams.verbose) {
+					std::cout << "Deleted " << deletedContours << " contours with dm: " << dmVal << endl;
 				}
 
 				if (rainParams.saveDebugImg) {
@@ -158,13 +166,13 @@ int BossuRainIntensityMeasurer::detectRain()
 
 				// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
 				vector<double> histogram;
-				computeOrientationHistogram(contours, histogram, dmVal);
+				computeOrientationHistogram(filteredContours, histogram, dmVal);
 
 				// 5. Model the accumulated histogram using a mixture distribution of 1 Gaussian
 				//    and 1 uniform distribution in the range [0-179] degrees.
 				double gaussianMean, gaussianStdDev, gaussianMixtureProportion;
 
-				estimateGaussianUniformMixtureDistribution(histogram, contours.size(),
+				estimateGaussianUniformMixtureDistribution(histogram, filteredContours.size(),
 					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
 
 				// 6. Use a Kalman filter for each of the three parameters of the mixture
@@ -283,7 +291,7 @@ BossuRainParameters BossuRainIntensityMeasurer::getDefaultParameters()
 	defaultParams.c = 3;
 	defaultParams.dm = { 1. };
 	defaultParams.emMaxIterations = 100;
-	defaultParams.minimumBlobSize = 3;
+	defaultParams.minimumBlobSize = 4;
 	defaultParams.maximumBlobSize = 50;
 	defaultParams.saveDebugImg = true;
 
@@ -321,27 +329,27 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		// Extract the largest eigenvalue and compute the major semi-axis according to
 		// Bossu et al, 2011, pp. 6, equation 14
 		double a = 2 * sqrt(eigenvalues.at<double>(0, 0));
+		a = a > 0 ? a : 1;
 
 		// Bossu et al, 2011, pp. 6, equation 17
 		double orientation = 0.5 * atan2(2 * mu.m11, (mu.m02 - mu.m20));
 
-		if (rainParams.verbose) {
-			std::cout << "Orientation: " << orientation << endl;
-		}
-
 		// Convert to degrees and scale in range [0, \pi] ( [0 180] )
-		orientation = orientation * 180. / CV_PI + 180;
+		orientation = orientation * 180. / CV_PI + 90;
 
 		// Compute the uncertainty of the estimate to be used as standard deviation
 		// for Gaussian
-		double estimateUncertainty = sqrt((pow(mu.m02 - mu.m20, 2) + 2 * pow(mu.m11, 2)) /
-			(pow(mu.m02 - mu.m20, 2) + 4 * pow(mu.m11, 2)) * dm);
+		double estimateUncertaintyNominator = sqrt(pow(mu.m02 - mu.m20, 2) + 2 * pow(mu.m11, 2)) * dm;
+		double estimateUncertaintyDenominator = pow(mu.m02 - mu.m20, 2) + 4 * pow(mu.m11, 2);
+
+		double estimateUncertainty = estimateUncertaintyDenominator > 0 ? 
+			estimateUncertaintyNominator / estimateUncertaintyDenominator :
+			1 ;
 
 		if (rainParams.verbose) {
-			std::cout << "Orientation: " << orientation << ", uncertainty: " 
-				<< estimateUncertainty << endl;
+			std::cout << "Orient: " << orientation << ", unct: " 
+				<< estimateUncertainty << ", m.semiaxis: " << a << endl;
 		}
-
 
 		// Compute the Gaussian (Parzen) estimate of the true orientation and 
 		// add to the histogram
@@ -479,7 +487,7 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 			mixtureProportionDenominator : 0.;
 		estimatedMixtureProportion.push_back(tmpMixtureProportion);
 
-		if (rainParams.verbose) {
+		if ((i % 25 == 0) && rainParams.verbose) {
 			std::cout << "EM step " << i << ": Mean: " << estimatedGaussianMean.back()
 				<< ", stdDev: " << estimatedGaussianStdDev.back() << ", mixProp: " <<
 				estimatedMixtureProportion.back() << endl;
@@ -494,41 +502,54 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& histogram, const double gaussianMean, const double gaussianStdDev, const double gaussianMixtureProportion, const double kalmanGaussianMean, const double kalmanGaussianStdDev, const double kalmanGaussianMixtureProportion)
 {
 	// Create canvas to plot on
-	Mat figure = Mat::ones(300, 180, CV_8UC3) * Vec3b(125, 125, 125);
-	figure = cv::scalar;
+	vector<Mat> channels;
+
+	for (auto i = 0; i < 3; ++i) {
+		channels.push_back(Mat::ones(300, 180, CV_8UC1) * 125);
+	}
+	
+	Mat figure;
+	cv::merge(channels, figure);
 	
 	// Plot histogram
 	// Find maximum value of histogram to scale
-	//double maxVal = 0;
-	//for (auto &val : histogram) {
-	//	if (val > maxVal) {
-	//		maxVal = val;
-	//	}
-	//}
+	double maxVal = 0;
+	for (auto &val : histogram) {
+		if (val > maxVal) {
+			maxVal = val;
+		}
+	}
 
-	//double scale = maxVal > 0 ? 300 / maxVal : 1;
+	double scale = maxVal > 0 ? 300 / maxVal : 1;
 
-	//if (histogram.size() >= 180) {
-	//	for (auto i = 0; i < 180; ++i) {
-	//		line(figure, Point(i, 299), Point(i, 300 - std::round(histogram[i] * scale)), Scalar(255, 255, 255));
-	//	}
-	//}
+	// Constrain the scale value based on the scale needed to display a uniform distribution
+	// with gaussianMixtureProportion == 0
+	double uniformScale = 100 / uniformDist(0, 180, 1);
 
-	//// Plot estimated Gaussian, uniform, Kalman filtered Gaussian, uniform
-	//for (auto i = 0; i < 180; ++i) {
-	//	double gaussianDensity = std::round(gaussianDist(gaussianMean, gaussianStdDev, i) * 
-	//		gaussianMixtureProportion * scale);
-	//	double uniformDensity = uniformDist(0, 180, i) * (1 - gaussianMixtureProportion) * scale;
-	//	double estimatedDensity = gaussianDensity + uniformDensity;
-	//	figure.at<Vec3b>(300 - estimatedDensity, i) = Vec3b(0, 0, 0); // Estimated density is black
-	//	
-	//	double kalmanGaussianDensity = std::round(gaussianDist(kalmanGaussianMean,
-	//		kalmanGaussianStdDev, i) * kalmanGaussianMixtureProportion * scale);
-	//	double kalmanUniformDensity = uniformDist(0, 180, i) *
-	//		(1 - kalmanGaussianMixtureProportion) * scale;
-	//	double kalmanEstimatedDensity = kalmanGaussianDensity + kalmanUniformDensity;
-	//	figure.at<Vec3b>(300 - kalmanEstimatedDensity, i) = Vec3b(255, 240, 108); // Kalman estimate is cyan		
-	//}
+	scale = uniformScale < scale ? uniformScale : scale;
+
+
+	if (histogram.size() >= 180) {
+		for (auto i = 0; i < 180; ++i) {
+			line(figure, Point(i, 299), Point(i, 300 - std::round(histogram[i] * scale)), Scalar(255, 255, 255));
+		}
+	}
+
+	// Plot estimated Gaussian, uniform, Kalman filtered Gaussian, uniform
+	for (auto i = 0; i < 180; ++i) {
+		double gaussianDensity = std::round(gaussianDist(gaussianMean, gaussianStdDev, i) * 
+			gaussianMixtureProportion * scale);
+		double uniformDensity = uniformDist(0, 180, i) * (1 - gaussianMixtureProportion) * scale;
+		double estimatedDensity = gaussianDensity + uniformDensity;
+		figure.at<Vec3b>(300 - estimatedDensity, i) = Vec3b(0, 0, 0); // Estimated density is black
+		
+		double kalmanGaussianDensity = std::round(gaussianDist(kalmanGaussianMean,
+			kalmanGaussianStdDev, i) * kalmanGaussianMixtureProportion * scale);
+		double kalmanUniformDensity = uniformDist(0, 180, i) *
+			(1 - kalmanGaussianMixtureProportion) * scale;
+		double kalmanEstimatedDensity = kalmanGaussianDensity + kalmanUniformDensity;
+		figure.at<Vec3b>(300 - kalmanEstimatedDensity, i) = Vec3b(255, 240, 108); // Kalman estimate is cyan		
+	}
 
 	imshow("Histogram", figure);
 }
