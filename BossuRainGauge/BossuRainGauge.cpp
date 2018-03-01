@@ -130,7 +130,7 @@ int BossuRainIntensityMeasurer::detectRain()
 
 				waitKey(0);
 
-				cout << "Sum of non-zero in candidateRainMask" << cv::countNonZero(candidateRainMask) << endl;
+				cout << "Sum of non-zero in candidateRainMask " << cv::countNonZero(candidateRainMask) << endl;
 			}
 
 			findContours(candidateRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
@@ -162,6 +162,7 @@ int BossuRainIntensityMeasurer::detectRain()
 				if (rainParams.saveDebugImg) {
 					// For now, only show the debug images with this settings
 					imshow("Filtered rain pixels", filteredCandidateMask);
+					waitKey(0);
 				}
 
 				// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
@@ -354,7 +355,7 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		// Compute the Gaussian (Parzen) estimate of the true orientation and 
 		// add to the histogram
 		for (double angle = 0; angle < histogram.size(); ++angle) {
-			histogram[angle] += a / (estimateUncertainty * sqrt(180)) *
+			histogram[angle] += a / (estimateUncertainty * sqrt(2*CV_PI)) *
 				exp(-0.5 * pow((angle - orientation) / estimateUncertainty, 2));
 		}
 	}
@@ -383,6 +384,10 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 		histogramSum += n;
 	}
 
+	//DEBUG: Histogram values
+	for(int i = 0; i < histogram.size(); i++)
+		cout << "Bin: " << i << " " << histogram[i] << endl;
+
 	// Compute the Cumulative Density Function (CDF) of the histogram and stop when we have 
 	// reached 50 % of the total sum
 	double cumulativeSum = 0;
@@ -397,6 +402,9 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 			break;
 		}
 	}
+
+	//DEBUG
+	cout << cumulativeSum << endl;
 
 	// Now that we have found the median, only use entries in the histogram equal to or above
 	// the position of the median to calculate the mean, std.dev and proportion estimate
@@ -415,7 +423,7 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	double sumOfSqDiffToMean = 0;
 
 	for (auto i = median; i < histogram.size(); ++i) {
-		sumOfSqDiffToMean += pow(i * histogram[i] - initialMean, 2);
+		sumOfSqDiffToMean += pow(i - initialMean, 2) * histogram[i];
 	}
 
 	initialStdDev = observationSum > 0 ? sqrt(sumOfSqDiffToMean / observationSum) : 0;
@@ -427,6 +435,8 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	for (auto i = median; i < histogram.size(); ++i) {
 		initialMixtureProportion += histogram[i] > 0 ? 
 			(1 - (uniformDistEstimate / histogram[i]) * histogram[i]) : 0;
+
+		cout << "Bin " << i << ", Initial proportion " << initialMixtureProportion <<  ", y "  << histogram[i] << endl;
 	}
 
 	initialMixtureProportion = observationSum > 0 ? initialMixtureProportion / observationSum : 0;
@@ -437,6 +447,9 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	vector<double> estimatedGaussianStdDev{ initialStdDev };
 	vector<double> z;
 	double uniformMass = uniformDist(0, 180, 1);
+	std::cout << "Mean: " << estimatedGaussianMean.back()
+		<< ", stdDev: " << estimatedGaussianStdDev.back() << ", mixProp: " <<
+		estimatedMixtureProportion.back() << endl;
 
 
 	for (auto i = 1; i < rainParams.emMaxIterations; ++i) {
@@ -473,16 +486,16 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 		estimatedGaussianMean.push_back(tmpGaussianMean);
 
 		for (double angle = 0; angle < 180; ++angle) {
-			stdDevNominator += ((1 - z[angle]) * (angle - estimatedGaussianMean.back()) *
+			stdDevNominator += ((1 - z[angle]) * pow(angle - estimatedGaussianMean.back(),2) *
 				histogram[angle]);
 			stdDevDenominator += (1 - z[angle]) * histogram[angle];
 
 			mixtureProportionNominator += (1 - z[angle]) * histogram[angle];
 			mixtureProportionDenominator += histogram[angle];
 		}
-		double tmpGaussianStdDev = stdDevDenominator > 0 ? stdDevNominator / stdDevDenominator : 0;
+		double tmpGaussianStdDev = stdDevDenominator > 0 ? sqrt(stdDevNominator / stdDevDenominator) : 0;
 		estimatedGaussianStdDev.push_back(tmpGaussianStdDev);
-
+		
 		double tmpMixtureProportion = mixtureProportionDenominator > 0 ? mixtureProportionNominator /
 			mixtureProportionDenominator : 0.;
 		estimatedMixtureProportion.push_back(tmpMixtureProportion);
@@ -556,7 +569,9 @@ void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& hi
 
 double BossuRainIntensityMeasurer::uniformDist(double a, double b, double pos)
 {
-	if (pos >= a || pos >= b) {
+	assert(b >= a);
+
+	if (pos >= a && pos <= b) {
 		return 1. / (b - a + 1);
 	}
 
@@ -602,6 +617,9 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	for (int i = 0; i < argc; i++)
+		cout << argv[i] << endl;
+		
 	std::string filename = cmd.get<std::string>("fileName");
 	std::string outputFolder = cmd.get<string>("outputFolder");
 
