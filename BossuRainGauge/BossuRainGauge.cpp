@@ -312,17 +312,17 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 
 	for (auto contour : contours) {
 		Moments mu = moments(contour, false);
-
+		
 		// Compute the major semiaxis of the ellipse equivalent to the BLOB
 		// In order to do so, we must compute eigenvalues of the matrix
 		// | m20 m11 |
 		// | m11 m02 |
 		// Bossu et al, 2011, pp. 6, equation 16
 		Mat momentsMat = Mat(2, 2, CV_64FC1);
-		momentsMat.at<double>(0, 0) = mu.m20;
-		momentsMat.at<double>(1, 0) = mu.m11;
-		momentsMat.at<double>(0, 1) = mu.m11;
-		momentsMat.at<double>(1, 1) = mu.m02;
+		momentsMat.at<double>(0, 0) = mu.mu20;
+		momentsMat.at<double>(1, 0) = mu.mu11;
+		momentsMat.at<double>(0, 1) = mu.mu11;
+		momentsMat.at<double>(1, 1) = mu.mu02;
 
 		Mat eigenvalues;
 		eigen(momentsMat, eigenvalues);
@@ -333,35 +333,35 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		a = a > 0 ? a : 1;
 
 		// Bossu et al, 2011, pp. 6, equation 17
-		double orientation = 0.5 * atan2(2 * mu.m11, (mu.m02 - mu.m20));
+		double orientation = 0.5 * (atan2(2 * mu.mu11, (mu.mu02 - mu.mu20)));
 
-		// Convert to degrees and scale in range [0, \pi] ( [0 180] )
-		orientation = orientation * 180. / CV_PI + 90;
+		//Convert from [-\pi / 2, \pi /2] to [0, \pi]
+		//orientation = orientation < 0. ? orientation + CV_PI : orientation;
+		orientation += CV_PI / 2.;
 
 		// Compute the uncertainty of the estimate to be used as standard deviation
 		// for Gaussian
-		double estimateUncertaintyNominator = sqrt(pow(mu.m02 - mu.m20, 2) + 2 * pow(mu.m11, 2)) * dm;
-		double estimateUncertaintyDenominator = pow(mu.m02 - mu.m20, 2) + 4 * pow(mu.m11, 2);
+		double estimateUncertaintyNominator = sqrt(pow(mu.mu02 - mu.mu20, 2) + 2 * pow(mu.mu11, 2)) * dm;
+		double estimateUncertaintyDenominator = pow(mu.mu02 - mu.mu20, 2) + 4 * pow(mu.mu11, 2);
 
 		double estimateUncertainty = estimateUncertaintyDenominator > 0 ? 
 			estimateUncertaintyNominator / estimateUncertaintyDenominator :
 			1 ;
 
 		if (rainParams.verbose) {
-			std::cout << "Orient: " << orientation << ", unct: " 
+			std::cout << "Orient (Rad): " << orientation << ", Orient (Deg): " << orientation * 180./CV_PI << ", unct: "
 				<< estimateUncertainty << ", m.semiaxis: " << a << endl;
+			cout << "mu20: " << mu.mu20 << ", mu02: " << mu.mu02 << ", mu11: " << mu.mu11 << ", lambda: " << eigenvalues.at<double>(0, 0) << ", m00: " << mu.m00 << endl;
 		}
 
 		// Compute the Gaussian (Parzen) estimate of the true orientation and 
 		// add to the histogram
 		for (double angle = 0; angle < histogram.size(); ++angle) {
+			double angle_rad = angle * CV_PI / 180.;
 			histogram[angle] += a / (estimateUncertainty * sqrt(2*CV_PI)) *
-				exp(-0.5 * pow((angle - orientation) / estimateUncertainty, 2));
+				exp(-0.5 * pow((angle_rad - orientation) / estimateUncertainty, 2));
 		}
 	}
-
-	
-
 }
 
 void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(const std::vector<double>& histogram, 
@@ -376,67 +376,73 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	// Initialize the EM algorithm as described by Bossu et al, 2011, page 8, upper right column
 	// We find the median value of the histogram and use it to estimate initial values of
 	// gaussianMean, gaussianStdDev, and gaussianMixtureProportion
-	
-	// In order to find median, find sum of histogram (the histogram is our unnormalized PDF)
-	double histogramSum = 0;
 
-	for (auto& n : histogram) {
-		histogramSum += n;
-	}
+	//Sort the histogram
+	std::vector<double> histogram_sorted = histogram;
+	std::sort(histogram_sorted.begin(), histogram_sorted.end());
 
 	//DEBUG: Histogram values
-	for(int i = 0; i < histogram.size(); i++)
-		cout << "Bin: " << i << " " << histogram[i] << endl;
+	//for(int i = 0; i < histogram_sorted.size(); i++)
+	//	cout << "DBin: " << i << " " << histogram_sorted[i] << endl;
 
-	// Compute the Cumulative Density Function (CDF) of the histogram and stop when we have 
-	// reached 50 % of the total sum
-	double cumulativeSum = 0;
-	double fiftyPercentSum = histogramSum / 2.;
+	cout << "Largest histogram value: " << histogram_sorted[histogram_sorted.size() - 1] << endl;
+
+
+	// Find the median value in the sorted histogram.
 	double median = 0;
 
-	for (auto i = 0; i < histogram.size(); ++i) {
-		cumulativeSum += histogram[i];
-
-		if (cumulativeSum > fiftyPercentSum) {
-			median = i;
-			break;
-		}
-	}
-
-	//DEBUG
-	cout << cumulativeSum << endl;
+	if (histogram_sorted.size() % 2 == 0)
+		median = (histogram_sorted[histogram_sorted.size() / 2 - 1] + histogram_sorted[histogram_sorted.size() / 2]) / 2;
+	else
+		median = histogram_sorted[histogram_sorted.size() / 2];
 
 	// Now that we have found the median, only use entries in the histogram equal to or above
-	// the position of the median to calculate the mean, std.dev and proportion estimate
+	// the median to calculate the mean, std.dev and proportion estimate
+	// i.e. subtract median and only use postive values
 	double sumAboveMedian = 0, observationSum = 0;
 	double initialStdDev = 0;
-	double totalSum = 0;
 
+	for (auto i = 0; i < histogram.size(); ++i) {
+		double val = histogram[i] - median;
+		if (val < 0.0)
+			continue;
 
-	for (auto i = median; i < histogram.size(); ++i) {
-		sumAboveMedian += i * histogram[i];
-		observationSum += histogram[i];
+		sumAboveMedian += i * val;
+		observationSum += val;
 	}
 
 	double initialMean = observationSum > 0 ? sumAboveMedian / observationSum : 90;
 
 	double sumOfSqDiffToMean = 0;
 
-	for (auto i = median; i < histogram.size(); ++i) {
-		sumOfSqDiffToMean += pow(i - initialMean, 2) * histogram[i];
+	for (auto i = 0; i < histogram.size(); ++i) {
+		double val = histogram[i] - median;
+		if (val < 0.0)
+			continue;
+
+		sumOfSqDiffToMean += pow(i - initialMean, 2) * val;
 	}
 
 	initialStdDev = observationSum > 0 ? sqrt(sumOfSqDiffToMean / observationSum) : 0;
 
+	//DEBUG:
+	cout << "Median: " << median << " , SumAboveMean: " << sumAboveMedian << " , ObservationSum: " << observationSum << " , initialMean: " << initialMean << " , sumOfSquareDiff: " << sumOfSqDiffToMean << " , initialStdDev: " << initialStdDev << endl;
+
 	// Use the observationSum / 180 to estimate the mixture proportion
-	double uniformDistEstimate = observationSum / histogram.size(); 
-	double initialMixtureProportion = 0;
+	double uniformDistEstimate = 1. / histogram.size(); // if observationSum/180 result in value above 1, which then results in negative number when saying 1-unifDistEst
+	double initialMixtureProportion = 0.;
 
-	for (auto i = median; i < histogram.size(); ++i) {
-		initialMixtureProportion += histogram[i] > 0 ? 
-			(1 - (uniformDistEstimate / histogram[i]) * histogram[i]) : 0;
+	cout << "Initial Mix Prop: " << initialMixtureProportion << " , uniform Dist est.: " << uniformDistEstimate << endl;
 
-		cout << "Bin " << i << ", Initial proportion " << initialMixtureProportion <<  ", y "  << histogram[i] << endl;
+	for (auto i = 0; i < histogram.size(); ++i) {
+		double val = histogram[i] - median;
+		if (val < 0.0)
+			continue;
+
+		initialMixtureProportion += val > 0 ? 
+			((1 - uniformDistEstimate) * val) : 0;
+
+		//cout << "Bin " << i << ", Initial proportion " << initialMixtureProportion <<  ", y "  << histogram[i] << ", median sub y " << val << endl;
 	}
 
 	initialMixtureProportion = observationSum > 0 ? initialMixtureProportion / observationSum : 0;
@@ -461,13 +467,6 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 				(estimatedMixtureProportion.back() * gaussianDist(estimatedGaussianMean.back(),
 					estimatedGaussianStdDev.back(), angle) +
 					(1. - estimatedMixtureProportion.back()) * uniformMass));
-
-			double nominator = ((1. - estimatedMixtureProportion.back()) * uniformMass);
-			double denominator = (estimatedMixtureProportion.back() * gaussianDist(estimatedGaussianMean.back(),
-				estimatedGaussianStdDev.back(), angle) +
-				(1. - estimatedMixtureProportion.back()) * uniformMass);
-
-			int k = 2 + denominator;
 		}
 
 		// Maximization step
