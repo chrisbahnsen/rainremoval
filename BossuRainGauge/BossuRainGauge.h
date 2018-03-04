@@ -120,6 +120,9 @@ private:
 		const double kalmanGaussianMean,
 		const double kalmanGaussianStdDev,
 		const double kalmanGaussianMixtureProportion);
+	double goodnessOfFitTest(const std::vector<double>& histogram,
+		double& gaussianMean,
+		double& gaussianStdDev);
 
 	double uniformDist(double a, double b, double pos);
 	double gaussianDist(double mean, double stdDev, double pos);

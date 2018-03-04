@@ -113,7 +113,7 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
-
+			candidateRainMask = imread("GMix_0.6GMean_65Gsigma_10sampleCount1000.png", CV_LOAD_IMAGE_GRAYSCALE);
 			// We now have the candidate rain pixels. Use connected component analysis
 			// to filter out large connected components
 			vector<vector<Point> > contours, filteredContours; 
@@ -134,6 +134,7 @@ int BossuRainIntensityMeasurer::detectRain()
 			}
 
 			findContours(candidateRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
+			cout << contours.size() << endl;
 
 			for (auto dmVal : rainParams.dm) {
 				Mat filteredCandidateMask = candidateRainMask.clone();
@@ -175,6 +176,9 @@ int BossuRainIntensityMeasurer::detectRain()
 
 				estimateGaussianUniformMixtureDistribution(histogram, filteredContours.size(),
 					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
+
+				// 6a. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
+				double goFD = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev);
 
 				// 6. Use a Kalman filter for each of the three parameters of the mixture
 				//	  distribution to smooth the model temporally
@@ -564,6 +568,70 @@ void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& hi
 	}
 
 	imshow("Histogram", figure);
+}
+
+double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& histogram,
+	double & gaussianMean,
+	double & gaussianStdDev) {
+
+	//Calculate the sum of the unnormalized histogram
+	double cummulativeSum = 0;
+	for (auto& n : histogram) {
+		cummulativeSum += n;
+	}
+
+	if (rainParams.verbose)
+		cout << "Cummulative sum of histogram: " << cummulativeSum << endl;
+
+	//Calculate the Emperical CDF of the Histogram
+	std::vector<double> eCDF(180,0);
+
+	//First the unnormalized bins
+	for (auto i = 0; i < histogram.size(); ++i) {
+		if (i == 0)
+			eCDF[i] += histogram[i];
+		else
+			eCDF[i] = histogram[i] + eCDF[i - 1];
+	}
+
+
+	if (rainParams.verbose) {
+		cout << "Unnormalized Emperical CDF" << endl;
+		for (auto i = 0; i < histogram.size(); ++i)
+			cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+	}
+
+	//Then normalize the bins
+	for (auto i = 0; i < histogram.size(); ++i)
+		eCDF[i] /= cummulativeSum;
+
+
+	if (rainParams.verbose) {
+		cout << "Normalized Emperical CDF" << endl;
+		for (auto i = 0; i < histogram.size(); ++i)
+			cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+	}
+
+
+	//Compare the Emperical CDF with the CDF of the actual normal distribution
+	//Save the highest distance between the two CDFs
+	double D = 0;
+	for (auto i = 0; i < histogram.size(); ++i) {
+		double normalCDF = 1. / 2. * (1. + erf((i - gaussianMean) / (gaussianStdDev*sqrt(2.))));
+		double diff = abs(normalCDF - eCDF[i]);
+
+		if (rainParams.verbose)
+			cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", diff: " << diff << endl;
+
+		if (diff > D)
+			D = diff;
+	}
+
+	if (rainParams.verbose)
+		cout << "Goodness-Of-Fitness test resulted in D: " << D << endl;
+
+	return D;
+	
 }
 
 double BossuRainIntensityMeasurer::uniformDist(double a, double b, double pos)
