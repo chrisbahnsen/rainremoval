@@ -83,6 +83,12 @@ struct BossuRainParameters {
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
 	std::vector<double> dm;
 
+	// Maximum discrepency allowed between the observed histogram and estimated distribution
+	float maxGoFDifference;
+
+	// Minimum Gaussian sufrace in order to classify image as rainy
+	float minimumGaussianSurface;
+
 	// Maximum number of iterations for the Expectation-Maximization algorithm
 	int emMaxIterations;
 
@@ -121,8 +127,9 @@ private:
 		const double kalmanGaussianStdDev,
 		const double kalmanGaussianMixtureProportion);
 	double goodnessOfFitTest(const std::vector<double>& histogram,
-		double& gaussianMean,
-		double& gaussianStdDev);
+		const double gaussianMean,
+		const double gaussianStdDev,
+		const double gaussianMixtureProportion);
 
 	double uniformDist(double a, double b, double pos);
 	double gaussianDist(double mean, double stdDev, double pos);

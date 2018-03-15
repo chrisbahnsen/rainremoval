@@ -113,7 +113,7 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
-			candidateRainMask = imread("GMix_0.6GMean_65Gsigma_10sampleCount1000.png", CV_LOAD_IMAGE_GRAYSCALE);
+			//candidateRainMask = imread("GMix_1GMean_55Gsigma_10sampleCount700.png", CV_LOAD_IMAGE_GRAYSCALE);
 			// We now have the candidate rain pixels. Use connected component analysis
 			// to filter out large connected components
 			vector<vector<Point> > contours, filteredContours; 
@@ -177,10 +177,10 @@ int BossuRainIntensityMeasurer::detectRain()
 				estimateGaussianUniformMixtureDistribution(histogram, filteredContours.size(),
 					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
 
-				// 6a. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
-				double goFD = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev);
+				// 6. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
+				double ksTest = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev, gaussianMixtureProportion);
 
-				// 6. Use a Kalman filter for each of the three parameters of the mixture
+				// 7. Use a Kalman filter for each of the three parameters of the mixture
 				//	  distribution to smooth the model temporally
 				Mat kalmanPredict = KF.predict();
 
@@ -206,7 +206,7 @@ int BossuRainIntensityMeasurer::detectRain()
 						kalmanGaussianMean, kalmanGaussianStdDev, kalmanGaussianMixtureProportion);
 				}
 
-				// 7. Detect the rain intensity from the mixture model
+				// 8. Detect the rain intensity from the mixture model
 				// Now that we have estimated the distribution and the filtered distribution,
 				// compute an estimate of the rain intensity
 				// Step 1: Compute the sum (surface) of the histogram
@@ -258,6 +258,17 @@ BossuRainParameters BossuRainIntensityMeasurer::loadParameters(std::string fileP
 			newParams.dm = dm;
 		}
 
+		float tmpFloat;
+		fs["maxGoFDifference"] >> tmpFloat;
+		if (tmpFloat > 0.) {
+			newParams.maxGoFDifference = tmpFloat;
+		}
+
+		fs["minimumGaussianSurface"] >> tmpFloat;
+		if (tmpFloat > 0.) {
+			newParams.minimumGaussianSurface = tmpFloat;
+		}
+
 		fs["emMaxIterations"] >> tmpInt;
 		if (tmpInt > 0) {
 			newParams.emMaxIterations = tmpInt;
@@ -280,6 +291,8 @@ int BossuRainIntensityMeasurer::saveParameters(std::string filePath)
 		fs << "minimumBlobSize" << rainParams.minimumBlobSize;
 		fs << "maximumBlobSize" << rainParams.maximumBlobSize;
 		fs << "dm" << rainParams.dm;
+		fs << "maxGoFDifference" << rainParams.maxGoFDifference;
+		fs << "minimumGaussianSurface" << rainParams.minimumGaussianSurface;
 		fs << "emMaxIterations" << rainParams.emMaxIterations;
 		fs << "saveDebugImg" << rainParams.saveDebugImg;
 		fs << "verbose" << rainParams.verbose;
@@ -298,6 +311,8 @@ BossuRainParameters BossuRainIntensityMeasurer::getDefaultParameters()
 	defaultParams.emMaxIterations = 100;
 	defaultParams.minimumBlobSize = 4;
 	defaultParams.maximumBlobSize = 50;
+	defaultParams.maxGoFDifference = 0.06;
+	defaultParams.minimumGaussianSurface = 0.35;
 	defaultParams.saveDebugImg = true;
 
 	
@@ -338,6 +353,8 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 
 		// Bossu et al, 2011, pp. 6, equation 17
 		double orientation = 0.5 * (atan2(2 * mu.mu11, (mu.mu02 - mu.mu20)));
+
+		cout << "Raw Orientation: " << orientation << endl;
 
 		//Convert from [-\pi / 2, \pi /2] to [0, \pi]
 		//orientation = orientation < 0. ? orientation + CV_PI : orientation;
@@ -440,8 +457,6 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double val = histogram[i] - median;
-		if (val < 0.0)
-			continue;
 
 		initialMixtureProportion += val > 0 ? 
 			((1 - uniformDistEstimate) * val) : 0;
@@ -571,8 +586,13 @@ void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& hi
 }
 
 double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& histogram,
-	double & gaussianMean,
-	double & gaussianStdDev) {
+	const double gaussianMean,
+	const double gaussianStdDev,
+	const double gaussianMixtureProportion) {
+	//Implementation of Goodness-Of-Fit / Kolmogrov-Smirnov test, pp. 8, equation 26
+
+	// TODO: Currently calculating the combined CDF by scaling the uniform and normal CDF by the micture proportion, and adding them. IS this the correct way?
+	// TODO: Unusure how the normal CDF will react when too close to 0 or 180. It isn't constrained to this range, and´will maybe not go fully from 0 to 1.
 
 	//Calculate the sum of the unnormalized histogram
 	double cummulativeSum = 0;
@@ -613,19 +633,45 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 	}
 
 
-	//Compare the Emperical CDF with the CDF of the actual normal distribution
+	//Compare the Emperical CDF with the CDF of the actual joint unifrom-Gaussian distribution
 	//Save the highest distance between the two CDFs
+
+	// Create canvas to plot on
+	vector<Mat> channels;
+
+	for (auto i = 0; i < 3; ++i) {
+		channels.push_back(Mat::ones(300, 180, CV_8UC1) * 125);
+	}
+
+	Mat ECDFFigure, uCDFFigure, nCDFFigure, cCDFFigure;
+	cv::merge(channels, ECDFFigure);
+	ECDFFigure.copyTo(uCDFFigure);
+	ECDFFigure.copyTo(nCDFFigure);
+	ECDFFigure.copyTo(cCDFFigure);
+	double scale = 300;
+
 	double D = 0;
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double normalCDF = 1. / 2. * (1. + erf((i - gaussianMean) / (gaussianStdDev*sqrt(2.))));
-		double diff = abs(normalCDF - eCDF[i]);
+		double uniformCDF = (i + 1.) / histogram.size();
+		double combinedCDF = gaussianMixtureProportion*normalCDF + (1- gaussianMixtureProportion)*uniformCDF;
+		double diff = abs(combinedCDF - eCDF[i]);
+
+		line(ECDFFigure, Point(i, 299), Point(i, 300 - std::round(eCDF[i] * scale)), Scalar(255, 255, 255));
+		line(uCDFFigure, Point(i, 299), Point(i, 300 - std::round(uniformCDF * scale)), Scalar(255, 255, 255));
+		line(nCDFFigure, Point(i, 299), Point(i, 300 - std::round(normalCDF * scale)), Scalar(255, 255, 255));
+		line(cCDFFigure, Point(i, 299), Point(i, 300 - std::round(combinedCDF * scale)), Scalar(255, 255, 255));
 
 		if (rainParams.verbose)
-			cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", diff: " << diff << endl;
+			cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", Uniform CDF: " << uniformCDF << ", combinedCDF: " << combinedCDF << ", diff: " << diff << endl;
 
 		if (diff > D)
 			D = diff;
 	}
+	imshow("ECDF", ECDFFigure);
+	imshow("Uniform CDF", uCDFFigure);
+	imshow("Normal CDF", nCDFFigure);
+	imshow("Combined CDF", cCDFFigure);
 
 	if (rainParams.verbose)
 		cout << "Goodness-Of-Fitness test resulted in D: " << D << endl;
