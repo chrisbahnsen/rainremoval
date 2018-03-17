@@ -113,7 +113,7 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
-			//candidateRainMask = imread("GMix_1GMean_55Gsigma_10sampleCount700.png", CV_LOAD_IMAGE_GRAYSCALE);
+			//candidateRainMask = imread("GMix_0.6GMean_65Gsigma_10sampleCount2000.png", CV_LOAD_IMAGE_GRAYSCALE);
 			// We now have the candidate rain pixels. Use connected component analysis
 			// to filter out large connected components
 			vector<vector<Point> > contours, filteredContours; 
@@ -133,27 +133,42 @@ int BossuRainIntensityMeasurer::detectRain()
 				cout << "Sum of non-zero in candidateRainMask " << cv::countNonZero(candidateRainMask) << endl;
 			}
 
-			findContours(candidateRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
+			//Find contours in candidateRainMask
+			vector<Vec4i> hierarchy;
+			Mat contourRainMask = candidateRainMask.clone();
+			findContours(contourRainMask, contours,hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
 			cout << contours.size() << endl;
 
+			//Mask out all unusable contours/BLOBs
+			Mat mask = Mat::ones(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1) * 255;
+
 			for (auto dmVal : rainParams.dm) {
-				Mat filteredCandidateMask = candidateRainMask.clone();
 				int deletedContours = 0;
 
-				for (auto contour : contours) {
-					if ((contour.size() > rainParams.maximumBlobSize) ||
-						(contour.size() < rainParams.minimumBlobSize)) {
+				// Threshold the detected blob. If outside threshold write to the mask and set to 0
+				for (int i = 0; i < contours.size(); i++) {
+
+					// Draw all pixels inside the contour
+					Mat contourMask = Mat::zeros(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1);
+					cv::drawContours(contourMask, contours, i, cv::Scalar(255, 255, 255), cv::FILLED);
+					
+					//Find which pixels are actually inside the drawn contour, and count them
+					bitwise_and(contourMask, candidateRainMask, contourMask);
+					int blobSize = cv::countNonZero(contourMask);
 						
-						for (auto point : contour) {
-							filteredCandidateMask.at<uchar>(point.y, point.x) = 0;
-						}
+					if ((blobSize > rainParams.maximumBlobSize) ||
+						(blobSize < rainParams.minimumBlobSize)) {
+						mask = mask - contourMask;
 						deletedContours++;
 					}
 					else {
-						// Retain the contour if below or equal to the size threshold
-						filteredContours.push_back(contour);
+						filteredContours.push_back(contours[i]);
 					}
 				}
+
+				// Apply bitwise and on the candidateRainMask wth the Mask matrix
+				Mat filteredCandidateMask = candidateRainMask.clone();
+				bitwise_and(filteredCandidateMask, mask, filteredCandidateMask);
 
 				// Delete the contour from the rain image
 				if (rainParams.verbose) {
@@ -162,8 +177,44 @@ int BossuRainIntensityMeasurer::detectRain()
 
 				if (rainParams.saveDebugImg) {
 					// For now, only show the debug images with this settings
+					imshow("Candidate rain pixels", candidateRainMask);
 					imshow("Filtered rain pixels", filteredCandidateMask);
-					waitKey(0);
+
+					//Show final contour mask
+					imshow("Mask", mask);
+
+					//Draw contours on candidateRainMask
+					vector<Mat> channels;
+					for (auto i = 0; i < 3; ++i) {
+						channels.push_back(candidateRainMask.clone());
+					}
+
+					Mat dst;
+					cv::merge(channels, dst);
+					int idx = 0;
+					for (; idx >= 0; idx = hierarchy[idx][0])
+					{
+						Scalar color(rand() & 255, rand() & 255, rand() & 255);
+						drawContours(dst, contours, idx, color, 1, 8, hierarchy);
+					}
+					imshow("Unfiltered Contours", dst);
+
+
+					//Draw contours on candidateRainMask
+					vector<Mat> filteredchannels;
+					for (auto i = 0; i < 3; ++i) {
+						filteredchannels.push_back(filteredCandidateMask.clone());
+					}
+
+					Mat filtered_dst;
+					cv::merge(filteredchannels, filtered_dst);
+					for (int i = 0; i < filteredContours.size(); i++)
+					{
+						Scalar color(rand() & 255, rand() & 255, rand() & 255);
+						drawContours(filtered_dst, filteredContours, i, color, 1, 8);
+					}
+					imshow("Filtered Contours", filtered_dst);
+					//waitKey(0);
 				}
 
 				// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
@@ -307,7 +358,7 @@ BossuRainParameters BossuRainIntensityMeasurer::getDefaultParameters()
 	BossuRainParameters defaultParams;
 
 	defaultParams.c = 3;
-	defaultParams.dm = { 1. };
+	defaultParams.dm = { 3. };
 	defaultParams.emMaxIterations = 100;
 	defaultParams.minimumBlobSize = 4;
 	defaultParams.maximumBlobSize = 50;
@@ -354,7 +405,7 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		// Bossu et al, 2011, pp. 6, equation 17
 		double orientation = 0.5 * (atan2(2 * mu.mu11, (mu.mu02 - mu.mu20)));
 
-		cout << "Raw Orientation: " << orientation << endl;
+		//cout << "Raw Orientation: " << orientation << endl;
 
 		//Convert from [-\pi / 2, \pi /2] to [0, \pi]
 		//orientation = orientation < 0. ? orientation + CV_PI : orientation;
@@ -370,9 +421,8 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 			1 ;
 
 		if (rainParams.verbose) {
-			std::cout << "Orient (Rad): " << orientation << ", Orient (Deg): " << orientation * 180./CV_PI << ", unct: "
-				<< estimateUncertainty << ", m.semiaxis: " << a << endl;
-			cout << "mu20: " << mu.mu20 << ", mu02: " << mu.mu02 << ", mu11: " << mu.mu11 << ", lambda: " << eigenvalues.at<double>(0, 0) << ", m00: " << mu.m00 << endl;
+			//std::cout << "Orient (Rad): " << orientation << ", Orient (Deg): " << orientation * 180./CV_PI << ", unct: " << estimateUncertainty << ", m.semiaxis: " << a << endl;
+			//cout << "mu20: " << mu.mu20 << ", mu02: " << mu.mu02 << ", mu11: " << mu.mu11 << ", lambda: " << eigenvalues.at<double>(0, 0) << ", m00: " << mu.m00 << endl;
 		}
 
 		// Compute the Gaussian (Parzen) estimate of the true orientation and 
@@ -446,14 +496,12 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 
 	initialStdDev = observationSum > 0 ? sqrt(sumOfSqDiffToMean / observationSum) : 0;
 
-	//DEBUG:
-	cout << "Median: " << median << " , SumAboveMean: " << sumAboveMedian << " , ObservationSum: " << observationSum << " , initialMean: " << initialMean << " , sumOfSquareDiff: " << sumOfSqDiffToMean << " , initialStdDev: " << initialStdDev << endl;
-
 	// Use the observationSum / 180 to estimate the mixture proportion
 	double uniformDistEstimate = 1. / histogram.size(); // if observationSum/180 result in value above 1, which then results in negative number when saying 1-unifDistEst
 	double initialMixtureProportion = 0.;
 
-	cout << "Initial Mix Prop: " << initialMixtureProportion << " , uniform Dist est.: " << uniformDistEstimate << endl;
+	//DEBUG:
+	cout << "Median: " << median << " , SumAboveMean: " << sumAboveMedian << " , ObservationSum: " << observationSum << " , initialMean: " << initialMean << " , sumOfSquareDiff: " << sumOfSqDiffToMean << " , initialStdDev: " << initialStdDev << " , uniform Dist est.: " << uniformDistEstimate << endl;
 
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double val = histogram[i] - median;
@@ -583,6 +631,11 @@ void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& hi
 	}
 
 	imshow("Histogram", figure);
+
+	if (rainParams.saveDebugImg) {
+		imwrite("Histogram.png", figure);
+	}
+
 }
 
 double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& histogram,
@@ -616,9 +669,9 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 
 
 	if (rainParams.verbose) {
-		cout << "Unnormalized Emperical CDF" << endl;
-		for (auto i = 0; i < histogram.size(); ++i)
-			cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+		//cout << "Unnormalized Emperical CDF" << endl;
+		//for (auto i = 0; i < histogram.size(); ++i)
+		//	cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
 	}
 
 	//Then normalize the bins
@@ -627,9 +680,9 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 
 
 	if (rainParams.verbose) {
-		cout << "Normalized Emperical CDF" << endl;
-		for (auto i = 0; i < histogram.size(); ++i)
-			cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+		//cout << "Normalized Emperical CDF" << endl;
+		//for (auto i = 0; i < histogram.size(); ++i)
+		//	cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
 	}
 
 
@@ -663,15 +716,23 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 		line(cCDFFigure, Point(i, 299), Point(i, 300 - std::round(combinedCDF * scale)), Scalar(255, 255, 255));
 
 		if (rainParams.verbose)
-			cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", Uniform CDF: " << uniformCDF << ", combinedCDF: " << combinedCDF << ", diff: " << diff << endl;
+			//cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", Uniform CDF: " << uniformCDF << ", combinedCDF: " << combinedCDF << ", diff: " << diff << endl;
 
 		if (diff > D)
 			D = diff;
 	}
 	imshow("ECDF", ECDFFigure);
-	imshow("Uniform CDF", uCDFFigure);
-	imshow("Normal CDF", nCDFFigure);
+	//imshow("Uniform CDF", uCDFFigure);
+	//imshow("Normal CDF", nCDFFigure);
 	imshow("Combined CDF", cCDFFigure);
+
+	if (rainParams.saveDebugImg) {
+		imwrite("ECDF.png", ECDFFigure);
+		imwrite("Uniform CDF.png", uCDFFigure);
+		imwrite("Normal CDF.png", nCDFFigure);
+		imwrite("Combined CDF.png", cCDFFigure);
+	}
+
 
 	if (rainParams.verbose)
 		cout << "Goodness-Of-Fitness test resulted in D: " << D << endl;
