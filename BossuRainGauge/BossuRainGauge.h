@@ -81,7 +81,7 @@ struct BossuRainParameters {
 	int minimumBlobSize; // TODO: Implement this
 
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
-	std::vector<double> dm;
+	float dm;
 
 	// Maximum discrepency allowed between the observed histogram and estimated distribution
 	float maxGoFDifference;

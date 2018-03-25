@@ -58,9 +58,7 @@ int BossuRainIntensityMeasurer::detectRain()
 
 	std::string header;
 
-	for (auto dmVal : rainParams.dm) {
-		header += to_string(dmVal) + ";" + to_string(dmVal) + ";"; // We log the estimated rain with and without the Kalman filter
-	}
+	header += to_string(rainParams.dm) + ";" + to_string(rainParams.dm) + ";"; // We log the estimated rain with and without the Kalman filter
 
 	resultsFile << header + "\n";
 
@@ -114,7 +112,7 @@ int BossuRainIntensityMeasurer::detectRain()
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
 
 			// Uncomment to try using a synthesized image with rain strokes of known parameters
-			//candidateRainMask = imread("GMix_0.6GMean_65Gsigma_10sampleCount1000.png", CV_LOAD_IMAGE_GRAYSCALE);
+			// candidateRainMask = imread("GMix_0.75-Mean_45.0-Sigma_10.0-LengthM_10.0-LenghtSD_0.2-WidhtM_2.0-widthSD_0.1-SC_500.png", CV_LOAD_IMAGE_GRAYSCALE);
 
 			// We now have the candidate rain pixels. Use connected component analysis
 			// to filter out large connected components
@@ -140,175 +138,173 @@ int BossuRainIntensityMeasurer::detectRain()
 			findContours(contourRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
 			cout << "Number of contours: " << contours.size() << endl;
 
-			for (auto dmVal : rainParams.dm) {
-				int deletedContours = 0;
+			int deletedContours = 0;
 
-				// Threshold the detected blob. If outside threshold write to the mask and set to 0
-				// DEBUG: It seems like drawContours on large contours (with holes and other blobs in it) will draw to include all of these
-				// DEBUG: Tried to fix this by sorting contours by size (contour size not blob size, maybe change this?), and then go through them in ascending order
+			// Threshold the detected blob. If outside threshold write to the mask and set to 0
+			// DEBUG: It seems like drawContours on large contours (with holes and other blobs in it) will draw to include all of these
+			// DEBUG: Tried to fix this by sorting contours by size (contour size not blob size, maybe change this?), and then go through them in ascending order
 
-				// Copy of candidateRainMask to keep track of already processed pixels
-				Mat rainPixelsTracker = candidateRainMask.clone();
+			// Copy of candidateRainMask to keep track of already processed pixels
+			Mat rainPixelsTracker = candidateRainMask.clone();
 
-				//Matrix to mask out all unusable contours/BLOBs
-				Mat mask = Mat::ones(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1) * 255;
+			//Matrix to mask out all unusable contours/BLOBs
+			Mat mask = Mat::ones(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1) * 255;
 
-				//Sort contours by contour size in ascending order
-				sort(contours.begin(), contours.end(), [](const vector<Point>& c1, const vector<Point>& c2) {
-					return c1.size() < c2.size();
-				});
+			//Sort contours by contour size in ascending order
+			sort(contours.begin(), contours.end(), [](const vector<Point>& c1, const vector<Point>& c2) {
+				return c1.size() < c2.size();
+			});
 
-				for (int i = 0; i < contours.size(); i++) {
-					// Draw all pixels inside the contour
-					Mat contourMask = Mat::zeros(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1);
-					cv::drawContours(contourMask, contours, i, cv::Scalar(255, 255, 255), cv::FILLED);
+			for (int i = 0; i < contours.size(); i++) {
+				// Draw all pixels inside the contour
+				Mat contourMask = Mat::zeros(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1);
+				cv::drawContours(contourMask, contours, i, cv::Scalar(255, 255, 255), cv::FILLED);
 
-					//Find which pixels are actually inside the drawn contour, and count them
-					bitwise_and(contourMask, rainPixelsTracker, contourMask);
-					int blobSize = cv::countNonZero(contourMask);
+				//Find which pixels are actually inside the drawn contour, and count them
+				bitwise_and(contourMask, rainPixelsTracker, contourMask);
+				int blobSize = cv::countNonZero(contourMask);
 
-					// Check if a BLOB only consists of contour pixels. If so it is discarded, by setting blob size to 0
-					blobSize = (blobSize - contours[i].size()) > 0 ? blobSize : 0;
+				// Check if a BLOB only consists of contour pixels. If so it is discarded, by setting blob size to 0
+				blobSize = (blobSize - contours[i].size()) > 0 ? blobSize : 0;
 
-					if ((blobSize > rainParams.maximumBlobSize) ||
-						(blobSize < rainParams.minimumBlobSize)) {
-						mask = mask - contourMask;
-						deletedContours++;
-					}
-					else {
-						filteredContours.push_back(contours[i]);
-					}
-					//Remove the BLOB pixels so that they arent counted again by other BLOBS by accident, as long as they werent just an empty blob)
-					if (blobSize > 0)
-						rainPixelsTracker -= contourMask;
-				}
-
-				// Apply bitwise and on the candidateRainMask wth the Mask matrix
-				Mat filteredCandidateMask = candidateRainMask.clone();
-				bitwise_and(filteredCandidateMask, mask, filteredCandidateMask);
-
-				// Delete the contour from the rain image
-				if (rainParams.verbose) {
-					std::cout << "Deleted " << deletedContours << " contours with dm: " << dmVal << endl;
-				}
-
-				if (rainParams.saveDebugImg) {
-					// For now, only show the debug images with this settings
-					imshow("Candidate rain pixels", candidateRainMask);
-					imshow("Filtered rain pixels", filteredCandidateMask);
-					imwrite("Filtered.png", filteredCandidateMask);
-
-					//Show final contour mask
-					imshow("Mask", mask);
-					imwrite("Mask.png", mask);
-
-					//Draw contours on candidateRainMask
-					vector<Mat> channels;
-					for (auto i = 0; i < 3; ++i) {
-						channels.push_back(candidateRainMask.clone());
-					}
-
-					Mat dst;
-					cv::merge(channels, dst);
-					for (int i = 0; i < contours.size(); i++)
-					{
-						Scalar color(rand() & 255, rand() & 255, rand() & 255);
-						drawContours(dst, contours, i, color, 1, 8);
-					}
-					imshow("Unfiltered Contours", dst);
-					imwrite("UnfilteredContours.png", dst);
-
-					//Draw contours on candidateRainMask
-					vector<Mat> filteredchannels;
-					for (auto i = 0; i < 3; ++i) {
-						filteredchannels.push_back(filteredCandidateMask.clone());
-					}
-
-					Mat filtered_dst;
-					cv::merge(filteredchannels, filtered_dst);
-					for (int i = 0; i < filteredContours.size(); i++)
-					{
-						Scalar color(rand() & 255, rand() & 255, rand() & 255);
-						drawContours(filtered_dst, filteredContours, i, color, 1, 8);
-					}
-					imshow("Filtered Contours", filtered_dst);
-					imwrite("FilteredContours.png", filtered_dst);
-					//waitKey(0);
-				}
-
-				// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
-				vector<double> histogram;
-				computeOrientationHistogram(filteredContours, histogram, dmVal);
-
-				// 5. Model the accumulated histogram using a mixture distribution of 1 Gaussian
-				//    and 1 uniform distribution in the range [0-179] degrees.
-				double gaussianMean, gaussianStdDev, gaussianMixtureProportion;
-
-				estimateGaussianUniformMixtureDistribution(histogram, filteredContours.size(),
-					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
-
-				// 6. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
-				double ksTest = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev, gaussianMixtureProportion);
-
-				// 7. Use a Kalman filter for each of the three parameters of the mixture
-				//	  distribution to smooth the model temporally
-				//    Only update if the Goodness-OF-Fit test is within in the defiend threshold
-				if (ksTest <= rainParams.maxGoFDifference) {
-					cout << "Updating Kalman filter" << endl;
-					Mat kalmanPredict = KF.predict();
-
-					Mat measurement = (Mat_<double>(3, 1) <<
-						gaussianMean, gaussianStdDev, gaussianMixtureProportion);
-					Mat estimated = KF.correct(measurement);
-
-					double kalmanGaussianMean = estimated.at<double>(0);
-					double kalmanGaussianStdDev = estimated.at<double>(1);
-					double kalmanGaussianMixtureProportion = estimated.at<double>(2);
-
-					if (rainParams.verbose) {
-						cout << "EM Estimated: Mean: " << gaussianMean << ", std.dev: " <<
-							gaussianStdDev << ", mix.prop: " << gaussianMixtureProportion << endl;
-						cout << "Kalman:       Mean: " << kalmanGaussianMean << ", std.dev: " <<
-							kalmanGaussianStdDev << ", mix.prop: " << kalmanGaussianMixtureProportion << endl;
-					}
-
-
-					if (rainParams.saveDebugImg)
-					{
-						plotDistributions(histogram, gaussianMean, gaussianStdDev,
-							gaussianMixtureProportion,
-							kalmanGaussianMean, kalmanGaussianStdDev, kalmanGaussianMixtureProportion);
-					}
-
-					// 8. Detect the rain intensity from the mixture model
-					// Now that we have estimated the distribution and the filtered distribution,
-					// compute an estimate of the rain intensity
-
-					// Only calculate the rain intensity if the kalman gaussian mixture proportion is above the threshold
-					if (kalmanGaussianMixtureProportion >= rainParams.minimumGaussianSurface) {
-						// Step 1: Compute the sum (surface) of the histogram
-						double histSum = 0;
-
-						for (auto& val : histogram) {
-							histSum += val;
-						}
-
-						// Step 2: Compute the rain intensity R on both the estimate and filtered estimate
-						double R = histSum * gaussianMixtureProportion;
-						double kalmanR = histSum * kalmanGaussianMixtureProportion;
-
-						resultsFile << to_string(R) + ";" + to_string(kalmanR) + ";\n";
-					}
-					else {
-						resultsFile << "No rain detected\n";
-					}
+				if ((blobSize > rainParams.maximumBlobSize) ||
+					(blobSize < rainParams.minimumBlobSize)) {
+					mask = mask - contourMask;
+					deletedContours++;
 				}
 				else {
-					cout << "Not updating Kalman filter" << endl;
-					resultsFile << "Not raining\n";
+					filteredContours.push_back(contours[i]);
 				}
-				cout << "\n" << endl;
+				//Remove the BLOB pixels so that they arent counted again by other BLOBS by accident, as long as they werent just an empty blob)
+				if (blobSize > 0)
+					rainPixelsTracker -= contourMask;
 			}
+
+			// Apply bitwise and on the candidateRainMask wth the Mask matrix
+			Mat filteredCandidateMask = candidateRainMask.clone();
+			bitwise_and(filteredCandidateMask, mask, filteredCandidateMask);
+
+			// Delete the contour from the rain image
+			if (rainParams.verbose) {
+				std::cout << "Deleted " << deletedContours << " contours with dm: " << rainParams.dm << endl;
+			}
+
+			if (rainParams.saveDebugImg) {
+				// For now, only show the debug images with this settings
+				imshow("Candidate rain pixels", candidateRainMask);
+				imshow("Filtered rain pixels", filteredCandidateMask);
+				imwrite("Filtered.png", filteredCandidateMask);
+
+				//Show final contour mask
+				imshow("Mask", mask);
+				imwrite("Mask.png", mask);
+
+				//Draw contours on candidateRainMask
+				vector<Mat> channels;
+				for (auto i = 0; i < 3; ++i) {
+					channels.push_back(candidateRainMask.clone());
+				}
+
+				Mat dst;
+				cv::merge(channels, dst);
+				for (int i = 0; i < contours.size(); i++)
+				{
+					Scalar color(rand() & 255, rand() & 255, rand() & 255);
+					drawContours(dst, contours, i, color, 1, 8);
+				}
+				imshow("Unfiltered Contours", dst);
+				imwrite("UnfilteredContours.png", dst);
+
+				//Draw contours on candidateRainMask
+				vector<Mat> filteredchannels;
+				for (auto i = 0; i < 3; ++i) {
+					filteredchannels.push_back(filteredCandidateMask.clone());
+				}
+
+				Mat filtered_dst;
+				cv::merge(filteredchannels, filtered_dst);
+				for (int i = 0; i < filteredContours.size(); i++)
+				{
+					Scalar color(rand() & 255, rand() & 255, rand() & 255);
+					drawContours(filtered_dst, filteredContours, i, color, 1, 8);
+				}
+				imshow("Filtered Contours", filtered_dst);
+				imwrite("FilteredContours.png", filtered_dst);
+				//waitKey(0);
+			}
+
+			// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
+			vector<double> histogram;
+			computeOrientationHistogram(filteredContours, histogram, rainParams.dm);
+
+			// 5. Model the accumulated histogram using a mixture distribution of 1 Gaussian
+			//    and 1 uniform distribution in the range [0-179] degrees.
+			double gaussianMean, gaussianStdDev, gaussianMixtureProportion;
+
+			estimateGaussianUniformMixtureDistribution(histogram, filteredContours.size(),
+				gaussianMean, gaussianStdDev, gaussianMixtureProportion);
+
+			// 6. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
+			double ksTest = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev, gaussianMixtureProportion);
+
+			// 7. Use a Kalman filter for each of the three parameters of the mixture
+			//	  distribution to smooth the model temporally
+			//    Only update if the Goodness-OF-Fit test is within in the defiend threshold
+			if (ksTest <= rainParams.maxGoFDifference) {
+				cout << "Updating Kalman filter" << endl;
+				Mat kalmanPredict = KF.predict();
+
+				Mat measurement = (Mat_<double>(3, 1) <<
+					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
+				Mat estimated = KF.correct(measurement);
+
+				double kalmanGaussianMean = estimated.at<double>(0);
+				double kalmanGaussianStdDev = estimated.at<double>(1);
+				double kalmanGaussianMixtureProportion = estimated.at<double>(2);
+
+				if (rainParams.verbose) {
+					cout << "EM Estimated: Mean: " << gaussianMean << ", std.dev: " <<
+						gaussianStdDev << ", mix.prop: " << gaussianMixtureProportion << endl;
+					cout << "Kalman:       Mean: " << kalmanGaussianMean << ", std.dev: " <<
+						kalmanGaussianStdDev << ", mix.prop: " << kalmanGaussianMixtureProportion << endl;
+				}
+
+
+				if (rainParams.saveDebugImg)
+				{
+					plotDistributions(histogram, gaussianMean, gaussianStdDev,
+						gaussianMixtureProportion,
+						kalmanGaussianMean, kalmanGaussianStdDev, kalmanGaussianMixtureProportion);
+				}
+
+				// 8. Detect the rain intensity from the mixture model
+				// Now that we have estimated the distribution and the filtered distribution,
+				// compute an estimate of the rain intensity
+
+				// Only calculate the rain intensity if the kalman gaussian mixture proportion is above the threshold
+				if (kalmanGaussianMixtureProportion >= rainParams.minimumGaussianSurface) {
+					// Step 1: Compute the sum (surface) of the histogram
+					double histSum = 0;
+
+					for (auto& val : histogram) {
+						histSum += val;
+					}
+
+					// Step 2: Compute the rain intensity R on both the estimate and filtered estimate
+					double R = histSum * gaussianMixtureProportion;
+					double kalmanR = histSum * kalmanGaussianMixtureProportion;
+
+					resultsFile << to_string(R) + ";" + to_string(kalmanR) + ";\n";
+				}
+				else {
+					resultsFile << "No rain detected\n";
+				}
+			}
+			else {
+				cout << "Not updating Kalman filter" << endl;
+				resultsFile << "Not raining\n";
+			}
+			cout << "\n" << endl;
 		}
 	}
 
@@ -338,13 +334,12 @@ BossuRainParameters BossuRainIntensityMeasurer::loadParameters(std::string fileP
 			newParams.maximumBlobSize = tmpInt;
 		}
 
-		std::vector<double> dm;
-		fs["dm"] >> dm;
-		if (!dm.empty()) {
-			newParams.dm = dm;
+		float tmpFloat;
+		fs["dm"] >> tmpFloat;
+		if (tmpFloat > 0.) {
+			newParams.dm = tmpFloat;
 		}
 
-		float tmpFloat;
 		fs["maxGoFDifference"] >> tmpFloat;
 		if (tmpFloat > 0.) {
 			newParams.maxGoFDifference = tmpFloat;
@@ -393,7 +388,7 @@ BossuRainParameters BossuRainIntensityMeasurer::getDefaultParameters()
 	BossuRainParameters defaultParams;
 
 	defaultParams.c = 3;
-	defaultParams.dm = { 1. };
+	defaultParams.dm = 1.;
 	defaultParams.emMaxIterations = 100;
 	defaultParams.minimumBlobSize = 4;
 	defaultParams.maximumBlobSize = 50;
@@ -773,7 +768,6 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 		cout << "Goodness-Of-Fitness test resulted in D: " << D << endl;
 
 	return D;
-	
 }
 
 double BossuRainIntensityMeasurer::uniformDist(double a, double b, double pos)
