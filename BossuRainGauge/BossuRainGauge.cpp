@@ -90,7 +90,14 @@ int BossuRainIntensityMeasurer::detectRain()
 		setIdentity(KF.measurementNoiseCov, Scalar::all(0.1)); // According to Bossu et al, 2011, p. 10, right column
 		setIdentity(KF.errorCovPost, Scalar::all(1));
 		
+		int vidLength = cap.get(CV_CAP_PROP_FRAME_COUNT);
+		int frameCounter = 6;
 		while (cap.grab()) {
+			frameCounter++;
+
+			if (frameCounter % 100 == 0)
+				cout << "Frame: " << frameCounter << "/" << vidLength << endl;
+
 			// Continue while there are frames to retrieve
 			cap.retrieve(frame);
 			
@@ -129,20 +136,18 @@ int BossuRainIntensityMeasurer::detectRain()
 				imwrite("Candidate.png", candidateRainMask);
 
 				waitKey(0);
-
-				cout << "Sum of non-zero in candidateRainMask " << cv::countNonZero(candidateRainMask) << endl;
 			}
+
 
 			//Find contours in candidateRainMask
 			Mat contourRainMask = candidateRainMask.clone();
 			findContours(contourRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
-			cout << "Number of contours: " << contours.size() << endl;
 
-			int deletedContours = 0;
 
-			// Threshold the detected blob. If outside threshold write to the mask and set to 0
-			// DEBUG: It seems like drawContours on large contours (with holes and other blobs in it) will draw to include all of these
-			// DEBUG: Tried to fix this by sorting contours by size (contour size not blob size, maybe change this?), and then go through them in ascending order
+			if (rainParams.verbose) {
+				cout << "Sum of non-zero in candidateRainMask " << cv::countNonZero(candidateRainMask) << endl;
+				cout << "Number of contours: " << contours.size() << endl;
+			}
 
 			// Copy of candidateRainMask to keep track of already processed pixels
 			Mat rainPixelsTracker = candidateRainMask.clone();
@@ -155,6 +160,8 @@ int BossuRainIntensityMeasurer::detectRain()
 				return c1.size() < c2.size();
 			});
 
+			// Threshold the detected blob. If outside threshold write to the mask and set to 0
+			int deletedContours = 0;
 			for (int i = 0; i < contours.size(); i++) {
 				// Draw all pixels inside the contour
 				Mat contourMask = Mat::zeros(candidateRainMask.rows, candidateRainMask.cols, CV_8UC1);
@@ -230,7 +237,6 @@ int BossuRainIntensityMeasurer::detectRain()
 				}
 				imshow("Filtered Contours", filtered_dst);
 				imwrite("FilteredContours.png", filtered_dst);
-				//waitKey(0);
 			}
 
 			// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
@@ -251,7 +257,6 @@ int BossuRainIntensityMeasurer::detectRain()
 			//	  distribution to smooth the model temporally
 			//    Only update if the Goodness-OF-Fit test is within in the defiend threshold
 			if (ksTest <= rainParams.maxGoFDifference) {
-				cout << "Updating Kalman filter" << endl;
 				Mat kalmanPredict = KF.predict();
 
 				Mat measurement = (Mat_<double>(3, 1) <<
@@ -263,6 +268,7 @@ int BossuRainIntensityMeasurer::detectRain()
 				double kalmanGaussianMixtureProportion = estimated.at<double>(2);
 
 				if (rainParams.verbose) {
+					cout << "Updating Kalman filter" << endl;
 					cout << "EM Estimated: Mean: " << gaussianMean << ", std.dev: " <<
 						gaussianStdDev << ", mix.prop: " << gaussianMixtureProportion << endl;
 					cout << "Kalman:       Mean: " << kalmanGaussianMean << ", std.dev: " <<
@@ -301,10 +307,12 @@ int BossuRainIntensityMeasurer::detectRain()
 				}
 			}
 			else {
-				cout << "Not updating Kalman filter" << endl;
 				resultsFile << "Not raining\n";
+				if(rainParams.verbose)
+					cout << "Not updating Kalman filter" << endl;
 			}
-			cout << "\n" << endl;
+			if (rainParams.verbose)
+				cout << "\n" << endl;
 		}
 	}
 
@@ -416,8 +424,8 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		
 		// Compute the major semiaxis of the ellipse equivalent to the BLOB
 		// In order to do so, we must compute eigenvalues of the matrix
-		// | m20 m11 |
-		// | m11 m02 |
+		// | mu20 mu11 |
+		// | mu11 mu02 |
 		// Bossu et al, 2011, pp. 6, equation 16
 		Mat momentsMat = Mat(2, 2, CV_64FC1);
 		momentsMat.at<double>(0, 0) = mu.mu20;
@@ -436,10 +444,7 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 		// Bossu et al, 2011, pp. 6, equation 17
 		double orientation = 0.5 * (atan2(2 * mu.mu11, (mu.mu02 - mu.mu20)));
 
-		//cout << "Raw Orientation: " << orientation << endl;
-
 		//Convert from [-\pi / 2, \pi /2] to [0, \pi]
-		//orientation = orientation < 0. ? orientation + CV_PI : orientation;
 		orientation += CV_PI / 2.;
 
 		// Compute the uncertainty of the estimate to be used as standard deviation
@@ -452,8 +457,7 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 			1 ;
 
 		if (rainParams.verbose) {
-			//std::cout << "Orient (Rad): " << orientation << ", Orient (Deg): " << orientation * 180./CV_PI << ", unct: " << estimateUncertainty << ", m.semiaxis: " << a << endl;
-			//cout << "mu20: " << mu.mu20 << ", mu02: " << mu.mu02 << ", mu11: " << mu.mu11 << ", lambda: " << eigenvalues.at<double>(0, 0) << ", m00: " << mu.m00 << endl;
+			std::cout << "Orient (Deg): " << orientation * 180./CV_PI << ", unct: " << estimateUncertainty << ", m.semiaxis: " << a << endl;
 		}
 
 		// Compute the Gaussian (Parzen) estimate of the true orientation and 
@@ -483,12 +487,8 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	std::vector<double> histogram_sorted = histogram;
 	std::sort(histogram_sorted.begin(), histogram_sorted.end());
 
-	//DEBUG: Histogram values
-	//for(int i = 0; i < histogram_sorted.size(); i++)
-	//	cout << "DBin: " << i << " " << histogram_sorted[i] << endl;
-
-	cout << "Largest histogram value: " << histogram_sorted[histogram_sorted.size() - 1] << endl;
-
+	if(rainParams.verbose)
+		cout << "Largest histogram value: " << histogram_sorted[histogram_sorted.size() - 1] << endl;
 
 	// Find the median value in the sorted histogram.
 	double median = 0;
@@ -531,16 +531,14 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	double uniformDistEstimate = 1. / histogram.size(); // if observationSum/180 result in value above 1, which then results in negative number when saying 1-unifDistEst
 	double initialMixtureProportion = 0.;
 
-	//DEBUG:
-	cout << "Median: " << median << ", SumAboveMean: " << sumAboveMedian << ", ObservationSum: " << observationSum << ", initialMean: " << initialMean << ", sumOfSquareDiff: " << sumOfSqDiffToMean << ", initialStdDev: " << initialStdDev << ", uniform Dist est.: " << uniformDistEstimate << endl;
+	if(rainParams.verbose)
+		cout << "Median: " << median << ", SumAboveMean: " << sumAboveMedian << ", ObservationSum: " << observationSum << ", initialMean: " << initialMean << ", sumOfSquareDiff: " << sumOfSqDiffToMean << ", initialStdDev: " << initialStdDev << ", uniform Dist est.: " << uniformDistEstimate << endl;
 
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double val = histogram[i] - median;
 
 		initialMixtureProportion += val > 0 ? 
 			((1 - uniformDistEstimate) * val) : 0;
-
-		//cout << "Bin " << i << ", Initial proportion " << initialMixtureProportion <<  ", y "  << histogram[i] << ", median sub y " << val << endl;
 	}
 
 	initialMixtureProportion = observationSum > 0 ? initialMixtureProportion / observationSum : 0;
@@ -551,9 +549,12 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	vector<double> estimatedGaussianStdDev{ initialStdDev };
 	vector<double> z;
 	double uniformMass = uniformDist(0, 180, 1);
-	std::cout << "Mean: " << estimatedGaussianMean.back()
-		<< ", stdDev: " << estimatedGaussianStdDev.back() << ", mixProp: " <<
-		estimatedMixtureProportion.back() << endl;
+
+	if (rainParams.verbose) {
+		std::cout << "Mean: " << estimatedGaussianMean.back()
+			<< ", stdDev: " << estimatedGaussianStdDev.back() << ", mixProp: " <<
+			estimatedMixtureProportion.back() << endl;
+	}
 
 
 	for (auto i = 1; i < rainParams.emMaxIterations; ++i) {
@@ -752,12 +753,12 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 		if (diff > D)
 			D = diff;
 	}
-	imshow("ECDF", ECDFFigure);
-	//imshow("Uniform CDF", uCDFFigure);
-	//imshow("Normal CDF", nCDFFigure);
-	imshow("Combined CDF", cCDFFigure);
 
 	if (rainParams.saveDebugImg) {
+		imshow("ECDF", ECDFFigure);
+		//imshow("Uniform CDF", uCDFFigure);
+		//imshow("Normal CDF", nCDFFigure);
+		imshow("Combined CDF", cCDFFigure);
 		imwrite("ECDF.png", ECDFFigure);
 		imwrite("Uniform CDF.png", uCDFFigure);
 		imwrite("Normal CDF.png", nCDFFigure);
