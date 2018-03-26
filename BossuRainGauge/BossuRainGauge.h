@@ -53,11 +53,14 @@
 //		   distribution. 
 //		   (Maybe use the built-in OpenCV EM class? There are indications that 
 //			the authors have used this in their implementation)
-// 6. Use a Kalman filter for each of the three parameters of the mixture 
-//	  distribution to smooth the model temporally
+// 6. Test the observed histogram against the estimated distributions
+//    with a Goodness-Of-Fit / Kolmogorv-Smirnov test
+// 7. If GOF test is passed, use a Kalman filter for each of the three parameters
+//    of the mixture distribution to smooth the model temporally
 //		a) The three parameters are: (1) Gaussian Mean, (2) Gaussian std.dev,
 //		   (3) mass ratio of Gaussian distribution to uniform distribution 
-// 7. Detect the rain intensity from the mixture model
+// 8. Detect the rain intensity from the mixture model, if the Kalman estimated
+//	  Gaussian mixture proportion is above the defined threshold
 //		a) Rain intensity =approx mass ratio of Gaussian distribution to 
 //		   uniform distribution multiplied by the unnormalized surface of the 
 //		   Gaussian-Uniform distribution (which correlates to the number of 
@@ -78,7 +81,7 @@ struct BossuRainParameters {
 	int maximumBlobSize;
 
 	// Minimum BLOB size of connected component in order to classify as rain pixel
-	int minimumBlobSize; // TODO: Implement this
+	int minimumBlobSize;
 
 	// Gaussian std.dev scalar for estimating the Histogram of Orientation of Streaks
 	float dm;
@@ -93,8 +96,9 @@ struct BossuRainParameters {
 	int emMaxIterations;
 
 	// Options
-	bool saveDebugImg;
+	bool saveImg;
 	bool verbose;
+	bool debug;
 
 	
 };
@@ -127,6 +131,10 @@ private:
 		const double kalmanGaussianStdDev,
 		const double kalmanGaussianMixtureProportion);
 	double goodnessOfFitTest(const std::vector<double>& histogram,
+		const double gaussianMean,
+		const double gaussianStdDev,
+		const double gaussianMixtureProportion);
+	void plotGoodnessOfFitTest(const std::vector<double>& histogram,
 		const double gaussianMean,
 		const double gaussianStdDev,
 		const double gaussianMixtureProportion);

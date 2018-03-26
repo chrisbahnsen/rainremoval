@@ -118,33 +118,14 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			threshold(diffImg, candidateRainMask, rainParams.c, 255, CV_THRESH_BINARY);
 
-			// Uncomment to try using a synthesized image with rain strokes of known parameters
-			// candidateRainMask = imread("GMix_0.75-Mean_45.0-Sigma_10.0-LengthM_10.0-LenghtSD_0.2-WidhtM_2.0-widthSD_0.1-SC_500.png", CV_LOAD_IMAGE_GRAYSCALE);
-
 			// We now have the candidate rain pixels. Use connected component analysis
-			// to filter out large connected components
+			// to filter out large connected components in candidateRainMask
 			vector<vector<Point> > contours, filteredContours; 
 
-			if (rainParams.saveDebugImg) {
-				imshow("Image", frame);
-				imwrite("backgroundImg.png", backgroundImage);
-				imshow("Foreground image", grayForegroundImage);
-				imwrite("foregroundImage.png", grayForegroundImage);
-				imshow("Difference image", diffImg);
-				imwrite("diffImg.png", diffImg);
-				imshow("Candidate rain pixels", candidateRainMask);
-				imwrite("Candidate.png", candidateRainMask);
-
-				waitKey(0);
-			}
-
-
-			//Find contours in candidateRainMask
 			Mat contourRainMask = candidateRainMask.clone();
 			findContours(contourRainMask, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
 
-
-			if (rainParams.verbose) {
+			if (rainParams.debug) {
 				cout << "Sum of non-zero in candidateRainMask " << cv::countNonZero(candidateRainMask) << endl;
 				cout << "Number of contours: " << contours.size() << endl;
 			}
@@ -192,51 +173,29 @@ int BossuRainIntensityMeasurer::detectRain()
 			bitwise_and(filteredCandidateMask, mask, filteredCandidateMask);
 
 			// Delete the contour from the rain image
-			if (rainParams.verbose) {
+			if (rainParams.debug) {
 				std::cout << "Deleted " << deletedContours << " contours with dm: " << rainParams.dm << endl;
 			}
 
-			if (rainParams.saveDebugImg) {
-				// For now, only show the debug images with this settings
-				imshow("Candidate rain pixels", candidateRainMask);
-				imshow("Filtered rain pixels", filteredCandidateMask);
+
+			if (rainParams.saveImg) {
+				imwrite("Image.png", frame);
+				imwrite("backgroundImg.png", backgroundImage);
+				imwrite("foregroundImage.png", grayForegroundImage);
+				imwrite("diffImg.png", diffImg);
+				imwrite("Candidate.png", candidateRainMask);
 				imwrite("Filtered.png", filteredCandidateMask);
-
-				//Show final contour mask
-				imshow("Mask", mask);
 				imwrite("Mask.png", mask);
-
-				//Draw contours on candidateRainMask
-				vector<Mat> channels;
-				for (auto i = 0; i < 3; ++i) {
-					channels.push_back(candidateRainMask.clone());
-				}
-
-				Mat dst;
-				cv::merge(channels, dst);
-				for (int i = 0; i < contours.size(); i++)
-				{
-					Scalar color(rand() & 255, rand() & 255, rand() & 255);
-					drawContours(dst, contours, i, color, 1, 8);
-				}
-				imshow("Unfiltered Contours", dst);
-				imwrite("UnfilteredContours.png", dst);
-
-				//Draw contours on candidateRainMask
-				vector<Mat> filteredchannels;
-				for (auto i = 0; i < 3; ++i) {
-					filteredchannels.push_back(filteredCandidateMask.clone());
-				}
-
-				Mat filtered_dst;
-				cv::merge(filteredchannels, filtered_dst);
-				for (int i = 0; i < filteredContours.size(); i++)
-				{
-					Scalar color(rand() & 255, rand() & 255, rand() & 255);
-					drawContours(filtered_dst, filteredContours, i, color, 1, 8);
-				}
-				imshow("Filtered Contours", filtered_dst);
-				imwrite("FilteredContours.png", filtered_dst);
+			}
+			if (rainParams.debug) {
+				imshow("Image", frame);
+				imshow("backgroundImg", backgroundImage);
+				imshow("foregroundImage", grayForegroundImage);
+				imshow("diffImg", diffImg);
+				imshow("Candidate", candidateRainMask);
+				imshow("Filtered", filteredCandidateMask);
+				imshow("Mask", mask);
+				waitKey(0);
 			}
 
 			// 4. Compute the Histogram of Orientation of Streaks (HOS) from the contours
@@ -253,9 +212,12 @@ int BossuRainIntensityMeasurer::detectRain()
 			// 6. Goodness-Of-Fit test between the observed histogram and estimated normal distribution
 			double ksTest = goodnessOfFitTest(histogram, gaussianMean, gaussianStdDev, gaussianMixtureProportion);
 
+			if(rainParams.debug || rainParams.saveImg)
+				plotGoodnessOfFitTest(histogram, gaussianMean, gaussianStdDev, gaussianMixtureProportion);
+
 			// 7. Use a Kalman filter for each of the three parameters of the mixture
 			//	  distribution to smooth the model temporally
-			//    Only update if the Goodness-OF-Fit test is within in the defiend threshold
+			//    Only update if the Goodness-OF-Fit test is within the defiend threshold
 			if (ksTest <= rainParams.maxGoFDifference) {
 				Mat kalmanPredict = KF.predict();
 
@@ -276,7 +238,7 @@ int BossuRainIntensityMeasurer::detectRain()
 				}
 
 
-				if (rainParams.saveDebugImg)
+				if (rainParams.saveImg || rainParams.debug)
 				{
 					plotDistributions(histogram, gaussianMean, gaussianStdDev,
 						gaussianMixtureProportion,
@@ -364,8 +326,9 @@ BossuRainParameters BossuRainIntensityMeasurer::loadParameters(std::string fileP
 		}
 
 
-		fs["saveDebugImg"] >> newParams.saveDebugImg;
+		fs["saveImg"] >> newParams.saveImg;
 		fs["verbose"] >> newParams.verbose;
+		fs["debug"] >> newParams.debug;
 	}
 
 	return newParams;
@@ -383,8 +346,9 @@ int BossuRainIntensityMeasurer::saveParameters(std::string filePath)
 		fs << "maxGoFDifference" << rainParams.maxGoFDifference;
 		fs << "minimumGaussianSurface" << rainParams.minimumGaussianSurface;
 		fs << "emMaxIterations" << rainParams.emMaxIterations;
-		fs << "saveDebugImg" << rainParams.saveDebugImg;
+		fs << "saveImg" << rainParams.saveImg;
 		fs << "verbose" << rainParams.verbose;
+		fs << "debug" << rainParams.debug;
 	}
 	else {
 		return 1;
@@ -402,8 +366,9 @@ BossuRainParameters BossuRainIntensityMeasurer::getDefaultParameters()
 	defaultParams.maximumBlobSize = 50;
 	defaultParams.maxGoFDifference = 0.06;
 	defaultParams.minimumGaussianSurface = 0.35;
-	defaultParams.saveDebugImg = true;
+	defaultParams.saveImg = true;
 	defaultParams.verbose = true;
+	defaultParams.debug = true;
 
 	
 	return defaultParams;
@@ -456,7 +421,7 @@ void BossuRainIntensityMeasurer::computeOrientationHistogram(
 			estimateUncertaintyNominator / estimateUncertaintyDenominator :
 			1 ;
 
-		if (rainParams.verbose) {
+		if (rainParams.debug) {
 			std::cout << "Orient (Deg): " << orientation * 180./CV_PI << ", unct: " << estimateUncertainty << ", m.semiaxis: " << a << endl;
 		}
 
@@ -487,7 +452,7 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	std::vector<double> histogram_sorted = histogram;
 	std::sort(histogram_sorted.begin(), histogram_sorted.end());
 
-	if(rainParams.verbose)
+	if(rainParams.debug)
 		cout << "Largest histogram value: " << histogram_sorted[histogram_sorted.size() - 1] << endl;
 
 	// Find the median value in the sorted histogram.
@@ -531,14 +496,14 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 	double uniformDistEstimate = 1. / histogram.size(); // if observationSum/180 result in value above 1, which then results in negative number when saying 1-unifDistEst
 	double initialMixtureProportion = 0.;
 
-	if(rainParams.verbose)
+	if(rainParams.debug)
 		cout << "Median: " << median << ", SumAboveMean: " << sumAboveMedian << ", ObservationSum: " << observationSum << ", initialMean: " << initialMean << ", sumOfSquareDiff: " << sumOfSqDiffToMean << ", initialStdDev: " << initialStdDev << ", uniform Dist est.: " << uniformDistEstimate << endl;
 
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double val = histogram[i] - median;
 
 		initialMixtureProportion += val > 0 ? 
-			((1 - uniformDistEstimate) * val) : 0;
+			((1. - uniformDistEstimate) * val) : 0;
 	}
 
 	initialMixtureProportion = observationSum > 0 ? initialMixtureProportion / observationSum : 0;
@@ -577,18 +542,18 @@ void BossuRainIntensityMeasurer::estimateGaussianUniformMixtureDistribution(cons
 		double mixtureProportionDenominator = 0;
 
 		for (double angle = 0; angle < 180; ++angle) {
-			meanNominator += (1 - z[angle]) * angle * histogram[angle];
-			meanDenominator += (1 - z[angle]) * histogram[angle];
+			meanNominator += (1. - z[angle]) * angle * histogram[angle];
+			meanDenominator += (1. - z[angle]) * histogram[angle];
 		}
 		double tmpGaussianMean = meanDenominator > 0 ? meanNominator / meanDenominator : 90.;
 		estimatedGaussianMean.push_back(tmpGaussianMean);
 
 		for (double angle = 0; angle < 180; ++angle) {
-			stdDevNominator += ((1 - z[angle]) * pow(angle - estimatedGaussianMean.back(),2) *
+			stdDevNominator += ((1. - z[angle]) * pow(angle - estimatedGaussianMean.back(),2) *
 				histogram[angle]);
-			stdDevDenominator += (1 - z[angle]) * histogram[angle];
+			stdDevDenominator += (1. - z[angle]) * histogram[angle];
 
-			mixtureProportionNominator += (1 - z[angle]) * histogram[angle];
+			mixtureProportionNominator += (1. - z[angle]) * histogram[angle];
 			mixtureProportionDenominator += histogram[angle];
 		}
 		double tmpGaussianStdDev = stdDevDenominator > 0 ? sqrt(stdDevNominator / stdDevDenominator) : 0;
@@ -662,11 +627,11 @@ void BossuRainIntensityMeasurer::plotDistributions(const std::vector<double>& hi
 		figure.at<Vec3b>(300 - kalmanEstimatedDensity, i) = Vec3b(255, 240, 108); // Kalman estimate is cyan		
 	}
 
-	imshow("Histogram", figure);
+	if(rainParams.debug)
+		imshow("Histogram", figure);
 
-	if (rainParams.saveDebugImg) {
+	if (rainParams.saveImg) 
 		imwrite("Histogram.png", figure);
-	}
 
 }
 
@@ -676,50 +641,75 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 	const double gaussianMixtureProportion) {
 	//Implementation of Goodness-Of-Fit / Kolmogrov-Smirnov test, pp. 8, equation 26
 
-	// TODO: Currently calculating the combined CDF by scaling the uniform and normal CDF by the micture proportion, and adding them. IS this the correct way?
-	// TODO: Unusure how the normal CDF will react when too close to 0 or 180. It isn't constrained to this range, and´will maybe not go fully from 0 to 1.
-
 	//Calculate the sum of the unnormalized histogram
 	double cummulativeSum = 0;
 	for (auto& n : histogram) {
 		cummulativeSum += n;
 	}
 
-	if (rainParams.verbose)
+	if (rainParams.debug)
 		cout << "Cummulative sum of histogram: " << cummulativeSum << endl;
 
 	//Calculate the Emperical CDF of the Histogram
-	std::vector<double> eCDF(180,0);
+	std::vector<double> eCDF(180, 0);
 
-	//First the unnormalized bins
-	for (auto i = 0; i < histogram.size(); ++i) {
-		if (i == 0)
-			eCDF[i] += histogram[i];
-		else
-			eCDF[i] = histogram[i] + eCDF[i - 1];
-	}
-
-
-	if (rainParams.verbose) {
-		//cout << "Unnormalized Emperical CDF" << endl;
-		//for (auto i = 0; i < histogram.size(); ++i)
-		//	cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+	//First determine the unnormalized bins
+	eCDF[0] = histogram[0];
+	for (auto i = 1; i < histogram.size(); ++i) {
+		eCDF[i] = histogram[i] + eCDF[i - 1];
 	}
 
 	//Then normalize the bins
 	for (auto i = 0; i < histogram.size(); ++i)
 		eCDF[i] /= cummulativeSum;
 
+	//Compare the Emperical CDF with the CDF of the actual joint unifrom-Gaussian distribution
+	//Save the largest distance between the two CDFs
+	double D = 0;
+	for (auto i = 0; i < histogram.size(); ++i) {
+		double normalCDF = 1. / 2. * (1. + erf((i - gaussianMean) / (gaussianStdDev*sqrt(2.))));
+		double uniformCDF = (i + 1.) / histogram.size();
+		double combinedCDF = gaussianMixtureProportion*normalCDF + (1 - gaussianMixtureProportion)*uniformCDF;
+		double diff = abs(combinedCDF - eCDF[i]);
 
-	if (rainParams.verbose) {
-		//cout << "Normalized Emperical CDF" << endl;
-		//for (auto i = 0; i < histogram.size(); ++i)
-		//	cout << "Bin: " << i << ", val: " << eCDF[i] << endl;
+		if (rainParams.debug)
+			cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", Uniform CDF: " << uniformCDF << ", combinedCDF: " << combinedCDF << ", diff: " << diff << endl;
+
+		if (diff > D)
+			D = diff;
+	}
+	if (rainParams.verbose)
+		cout << "Goodness-Of-Fit test resulted in D: " << D << endl;
+
+	return D;
+}
+
+void BossuRainIntensityMeasurer::plotGoodnessOfFitTest(const std::vector<double>& histogram,
+	const double gaussianMean,
+	const double gaussianStdDev,
+	const double gaussianMixtureProportion) {
+	//Plot Goodness-Of-Fit / Kolmogrov-Smirnov test, pp. 8, equation 26
+	//Moved to separate function to avoid calculate plot if not desired
+
+	//Calculate the sum of the unnormalized histogram
+	double cummulativeSum = 0;
+	for (auto& n : histogram) {
+		cummulativeSum += n;
+	}
+	//Calculate the Emperical CDF of the Histogram
+	std::vector<double> eCDF(180, 0);
+
+	//First determine the unnormalized bins
+	eCDF[0] = histogram[0];
+	for (auto i = 1; i < histogram.size(); ++i) {
+		eCDF[i] = histogram[i] + eCDF[i - 1];
 	}
 
+	//Then normalize the bins
+	for (auto i = 0; i < histogram.size(); ++i)
+		eCDF[i] /= cummulativeSum;
 
-	//Compare the Emperical CDF with the CDF of the actual joint unifrom-Gaussian distribution
-	//Save the highest distance between the two CDFs
+	//Plot the Emperical CDF and the CDF of the actual joint unifrom-Gaussian distribution
 
 	// Create canvas to plot on
 	vector<Mat> channels;
@@ -735,40 +725,29 @@ double BossuRainIntensityMeasurer::goodnessOfFitTest(const std::vector<double>& 
 	ECDFFigure.copyTo(cCDFFigure);
 	double scale = 300;
 
-	double D = 0;
 	for (auto i = 0; i < histogram.size(); ++i) {
 		double normalCDF = 1. / 2. * (1. + erf((i - gaussianMean) / (gaussianStdDev*sqrt(2.))));
 		double uniformCDF = (i + 1.) / histogram.size();
-		double combinedCDF = gaussianMixtureProportion*normalCDF + (1- gaussianMixtureProportion)*uniformCDF;
-		double diff = abs(combinedCDF - eCDF[i]);
+		double combinedCDF = gaussianMixtureProportion*normalCDF + (1 - gaussianMixtureProportion)*uniformCDF;
 
 		line(ECDFFigure, Point(i, 299), Point(i, 300 - std::round(eCDF[i] * scale)), Scalar(255, 255, 255));
 		line(uCDFFigure, Point(i, 299), Point(i, 300 - std::round(uniformCDF * scale)), Scalar(255, 255, 255));
 		line(nCDFFigure, Point(i, 299), Point(i, 300 - std::round(normalCDF * scale)), Scalar(255, 255, 255));
 		line(cCDFFigure, Point(i, 299), Point(i, 300 - std::round(combinedCDF * scale)), Scalar(255, 255, 255));
-
-		if (rainParams.verbose)
-			//cout << "ECDF: " << eCDF[i] << ", Gauss CDF: " << normalCDF << ", Uniform CDF: " << uniformCDF << ", combinedCDF: " << combinedCDF << ", diff: " << diff << endl;
-
-		if (diff > D)
-			D = diff;
 	}
 
-	if (rainParams.saveDebugImg) {
-		imshow("ECDF", ECDFFigure);
-		//imshow("Uniform CDF", uCDFFigure);
-		//imshow("Normal CDF", nCDFFigure);
-		imshow("Combined CDF", cCDFFigure);
+	if (rainParams.saveImg) {
 		imwrite("ECDF.png", ECDFFigure);
 		imwrite("Uniform CDF.png", uCDFFigure);
 		imwrite("Normal CDF.png", nCDFFigure);
 		imwrite("Combined CDF.png", cCDFFigure);
 	}
-
-	if (rainParams.verbose)
-		cout << "Goodness-Of-Fitness test resulted in D: " << D << endl;
-
-	return D;
+	if (rainParams.debug) {
+		imshow("ECDF", ECDFFigure);
+		imshow("Uniform CDF", uCDFFigure);
+		imshow("Normal CDF", nCDFFigure);
+		imshow("Combined CDF", cCDFFigure);
+	}
 }
 
 double BossuRainIntensityMeasurer::uniformDist(double a, double b, double pos)
@@ -805,8 +784,9 @@ int main(int argc, char** argv)
 		"{outputFolder of   |       | Output folder of processed files}"
 		"{settingsFile sf   |       | File from which settings are loaded/saved}"
 		"{saveSettings s    | 0     | Save settings to settingsFile (0,1)}"	
-		"{debugImage di     | 0     | Save debug images from intermediate processing}"
+		"{saveImage i       | 0     | Save images from intermediate processing}"
 		"{verbose v         | 0     | Write additional debug information to console}"
+		"{debug d           | 0     | Enables debug mode. Writes extra information to console and shows intermediate images}"
 		;
 
 	cv::CommandLineParser cmd(argc, argv, keys);
@@ -834,8 +814,9 @@ int main(int argc, char** argv)
 	}
 
 	// Set parameters here
-	defaultParams.saveDebugImg = cmd.get<int>("debugImage") != 0;
+	defaultParams.saveImg = cmd.get<int>("saveImage") != 0;
 	defaultParams.verbose = cmd.get<int>("verbose") != 0;
+	defaultParams.debug = cmd.get<int>("debug") != 0;
 
 	BossuRainIntensityMeasurer bossuIntensityMeasurer(filename, outputFolder, defaultParams);
 
