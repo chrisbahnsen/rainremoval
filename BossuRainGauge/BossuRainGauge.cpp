@@ -54,13 +54,19 @@ int BossuRainIntensityMeasurer::detectRain()
 
 	// Create file, write header
 	ofstream resultsFile;
-	resultsFile.open(this->outputFolder + "/" + "bossuRainGauge.txt", ios::out | ios::trunc);
+	resultsFile.open(this->outputFolder + "/" + this->inputVideo + "Results" + ".csv", ios::out | ios::trunc);
 
 	std::string header;
 
-	header += to_string(rainParams.dm) + ";" + to_string(rainParams.dm) + ";"; // We log the estimated rain with and without the Kalman filter
+	header += string("InputVideo") + ";" + "Frame#" + "; " + 
+		"Gauss Mean" + ";" + "GaussStdDev" + ";" +
+		"Gauss Mix. Prop." + ";" + "Goodness-Of-Fit Value" + ";" +
+		"kalmanGaussMean" + ";" + "kalmanGaussStdDev" + ";" +
+		"kalmanGaussMixProp" + ";" + "Rain Intensity" + ";" + "Kalman Rain Intensity" + "\n";
+	 
+	resultsFile << header;
 
-	resultsFile << header + "\n";
+	double kalmanMeanTmp, kalmanStdDevTmp, kalmanMixPropTmp = 0.0; 0.0; 0.0;
 
 	if (cap.isOpened()) {
 		Mat frame, foregroundMask, backgroundImage, foregroundImage;
@@ -217,67 +223,86 @@ int BossuRainIntensityMeasurer::detectRain()
 
 			// 7. Use a Kalman filter for each of the three parameters of the mixture
 			//	  distribution to smooth the model temporally
-			//    Only update if the Goodness-OF-Fit test is within the defiend threshold
+			//    (Should only update if the Goodness-OF-Fit test is within the defiend threshold, but we still enter here for plotting reasons. Though we only update if ksTest is met)
+				
+			Mat estimated;
+
+			double kalmanGaussianMean;
+			double kalmanGaussianStdDev;
+			double kalmanGaussianMixtureProportion;
+
 			if (ksTest <= rainParams.maxGoFDifference) {
+
 				Mat kalmanPredict = KF.predict();
 
 				Mat measurement = (Mat_<double>(3, 1) <<
 					gaussianMean, gaussianStdDev, gaussianMixtureProportion);
-				Mat estimated = KF.correct(measurement);
+				estimated = KF.correct(measurement);
 
-				double kalmanGaussianMean = estimated.at<double>(0);
-				double kalmanGaussianStdDev = estimated.at<double>(1);
-				double kalmanGaussianMixtureProportion = estimated.at<double>(2);
+				kalmanGaussianMean = estimated.at<double>(0);
+				kalmanGaussianStdDev = estimated.at<double>(1);
+				kalmanGaussianMixtureProportion = estimated.at<double>(2);
 
-				if (rainParams.verbose) {
+				kalmanMeanTmp = kalmanGaussianMean;
+				kalmanStdDevTmp = kalmanGaussianStdDev;
+				kalmanMixPropTmp = kalmanGaussianMixtureProportion;
+
+				if(rainParams.verbose)
 					cout << "Updating Kalman filter" << endl;
-					cout << "EM Estimated: Mean: " << gaussianMean << ", std.dev: " <<
-						gaussianStdDev << ", mix.prop: " << gaussianMixtureProportion << endl;
-					cout << "Kalman:       Mean: " << kalmanGaussianMean << ", std.dev: " <<
-						kalmanGaussianStdDev << ", mix.prop: " << kalmanGaussianMixtureProportion << endl;
-				}
-
-
-				if (rainParams.saveImg || rainParams.debug)
-				{
-					plotDistributions(histogram, gaussianMean, gaussianStdDev,
-						gaussianMixtureProportion,
-						kalmanGaussianMean, kalmanGaussianStdDev, kalmanGaussianMixtureProportion);
-				}
-
-				// 8. Detect the rain intensity from the mixture model
-				// Now that we have estimated the distribution and the filtered distribution,
-				// compute an estimate of the rain intensity
-
-				// Only calculate the rain intensity if the kalman gaussian mixture proportion is above the threshold
-				if (kalmanGaussianMixtureProportion >= rainParams.minimumGaussianSurface) {
-					// Step 1: Compute the sum (surface) of the histogram
-					double histSum = 0;
-
-					for (auto& val : histogram) {
-						histSum += val;
-					}
-
-					// Step 2: Compute the rain intensity R on both the estimate and filtered estimate
-					double R = histSum * gaussianMixtureProportion;
-					double kalmanR = histSum * kalmanGaussianMixtureProportion;
-
-					resultsFile << to_string(R) + ";" + to_string(kalmanR) + ";\n";
-				}
-				else {
-					resultsFile << "No rain detected\n";
-				}
 			}
 			else {
-				resultsFile << "Not raining\n";
-				if(rainParams.verbose)
+
+				kalmanGaussianMean = kalmanMeanTmp;
+				kalmanGaussianStdDev = kalmanStdDevTmp;
+				kalmanGaussianMixtureProportion = kalmanMixPropTmp;
+
+				if (rainParams.verbose)
 					cout << "Not updating Kalman filter" << endl;
 			}
+
+			if (rainParams.verbose) {
+				cout << "EM Estimated: Mean: " << gaussianMean << ", std.dev: " <<
+					gaussianStdDev << ", mix.prop: " << gaussianMixtureProportion << endl;
+				cout << "Kalman:       Mean: " << kalmanGaussianMean << ", std.dev: " <<
+					kalmanGaussianStdDev << ", mix.prop: " << kalmanGaussianMixtureProportion << endl;
+			}
+
+
+			if (rainParams.saveImg || rainParams.debug)
+			{
+				plotDistributions(histogram, gaussianMean, gaussianStdDev,
+					gaussianMixtureProportion,
+					kalmanGaussianMean, kalmanGaussianStdDev, kalmanGaussianMixtureProportion);
+			}
+
+			// 8. Detect the rain intensity from the mixture model
+			// Now that we have estimated the distribution and the filtered distribution,
+			// compute an estimate of the rain intensity
+			// (Should only be calculated if kalmanGaussianMixtureProportion is a bove the threshold. Still calculated for plotting reasons)
+				
+			// Step 1: Compute the sum (surface) of the histogram
+			double histSum = 0;
+
+			for (auto& val : histogram) {
+				histSum += val;
+			}
+
+			// Step 2: Compute the rain intensity R on both the estimate and filtered estimate
+			double R = histSum * gaussianMixtureProportion;
+			double kalmanR = histSum * kalmanGaussianMixtureProportion;
+
+			resultsFile << this->inputVideo + ";" + to_string(frameCounter) + ";" +
+				to_string(gaussianMean) + ";" + to_string(gaussianStdDev) + ";" +
+				to_string(gaussianMixtureProportion) + ";" + to_string(ksTest) + ";" +
+				to_string(kalmanGaussianMean) + ";" + to_string(kalmanGaussianStdDev) + ";" +
+				to_string(kalmanGaussianMixtureProportion) + ";" + to_string(R) + ";" + to_string(kalmanR) + "\n";
+
 			if (rainParams.verbose)
 				cout << "\n" << endl;
 		}
-	}
 
+	}
+	resultsFile.close();
 	return 0;
 }
 
