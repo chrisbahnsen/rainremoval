@@ -37,9 +37,10 @@
 using namespace std;
 using namespace cv;
 
-BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string inputVideo, std::string outputFolder, BossuRainParameters rainParams)
+BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams)
 {
 	this->inputVideo = inputVideo;
+	this->settingsFile = settingsFile;
 	this->outputFolder = outputFolder;
 	this->rainParams = rainParams;
 }
@@ -57,10 +58,9 @@ int BossuRainIntensityMeasurer::detectRain()
 	resultsFile.open(this->outputFolder + "/" + this->inputVideo + "Results" + ".csv", ios::out | ios::trunc);
 
 	std::string header;
-
-	header += string("InputVideo") + ";" + "Frame#" + "; " + 
-		"Gauss Mean" + ";" + "GaussStdDev" + ";" +
-		"Gauss Mix. Prop." + ";" + "Goodness-Of-Fit Value" + ";" +
+	header += string("settingsFile") + ";" + "InputVideo" + "; " + "Frame#" + "; " +
+		"GaussMean" + ";" + "GaussStdDev" + ";" +
+		"GaussMixProp" + ";" + "Goodness-Of-Fit Value" + ";" +
 		"kalmanGaussMean" + ";" + "kalmanGaussStdDev" + ";" +
 		"kalmanGaussMixProp" + ";" + "Rain Intensity" + ";" + "Kalman Rain Intensity" + "\n";
 	 
@@ -291,7 +291,7 @@ int BossuRainIntensityMeasurer::detectRain()
 			double R = histSum * gaussianMixtureProportion;
 			double kalmanR = histSum * kalmanGaussianMixtureProportion;
 
-			resultsFile << this->inputVideo + ";" + to_string(frameCounter) + ";" +
+			resultsFile << this->settingsFile + ";" + this->inputVideo + "; " + to_string(frameCounter) + "; " +
 				to_string(gaussianMean) + ";" + to_string(gaussianStdDev) + ";" +
 				to_string(gaussianMixtureProportion) + ";" + to_string(ksTest) + ";" +
 				to_string(kalmanGaussianMean) + ";" + to_string(kalmanGaussianStdDev) + ";" +
@@ -831,11 +831,12 @@ int main(int argc, char** argv)
 		
 	std::string filename = cmd.get<std::string>("fileName");
 	std::string outputFolder = cmd.get<string>("outputFolder");
+	std::string settingsFile = cmd.get<string>("settingsFile");
 
 	BossuRainParameters defaultParams = BossuRainIntensityMeasurer::getDefaultParameters();
 
 	if (cmd.has("settingsFile")) {
-		defaultParams = BossuRainIntensityMeasurer::loadParameters(cmd.get<std::string>("settingsFile"));
+		defaultParams = BossuRainIntensityMeasurer::loadParameters(settingsFile);
 	}
 
 	// Set parameters here
@@ -843,11 +844,11 @@ int main(int argc, char** argv)
 	defaultParams.verbose = cmd.get<int>("verbose") != 0;
 	defaultParams.debug = cmd.get<int>("debug") != 0;
 
-	BossuRainIntensityMeasurer bossuIntensityMeasurer(filename, outputFolder, defaultParams);
+	BossuRainIntensityMeasurer bossuIntensityMeasurer(filename, settingsFile, outputFolder, defaultParams);
 
 	// Save final settings
 	if (cmd.has("settingsFile") && (cmd.get<int>("saveSettings") != 0)) {
-		bossuIntensityMeasurer.saveParameters(cmd.get<std::string>("settingsFile"));
+		bossuIntensityMeasurer.saveParameters(settingsFile);
 	}
 
 	bossuIntensityMeasurer.detectRain();

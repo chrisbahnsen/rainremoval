@@ -105,7 +105,7 @@ struct BossuRainParameters {
 
 class BossuRainIntensityMeasurer {
 public:
-	BossuRainIntensityMeasurer(std::string inputVideo, std::string outputFolder, BossuRainParameters rainParams = BossuRainIntensityMeasurer::getDefaultParameters());
+	BossuRainIntensityMeasurer(std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams = BossuRainIntensityMeasurer::getDefaultParameters());
 
 	int detectRain();
 
@@ -143,7 +143,7 @@ private:
 	double gaussianDist(double mean, double stdDev, double pos);
 	
 
-	std::string inputVideo, outputFolder;
+	std::string inputVideo, settingsFile, outputFolder;
 
 	BossuRainParameters rainParams;
 };
