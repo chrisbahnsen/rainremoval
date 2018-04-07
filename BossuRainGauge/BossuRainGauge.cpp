@@ -36,10 +36,10 @@
 using namespace std;
 using namespace cv;
 
-BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string currentPath, std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams)
+BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string inputVideo, std::string filePath, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams)
 {
-	this->currentPath = currentPath;
 	this->inputVideo = inputVideo;
+	this->filePath = filePath;
 	this->settingsFile = settingsFile;
 	this->outputFolder = outputFolder;
 	this->rainParams = rainParams;
@@ -48,7 +48,7 @@ BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string currentPath, 
 int BossuRainIntensityMeasurer::detectRain()
 {
 	// Open video
-	VideoCapture cap(inputVideo);
+	VideoCapture cap(this->filePath + this->inputVideo);
 
 	cv::Ptr<BackgroundSubtractorMOG2> backgroundSubtractor = 
 		cv::createBackgroundSubtractorMOG2(500, 16.0, false);
@@ -56,9 +56,6 @@ int BossuRainIntensityMeasurer::detectRain()
 	// Create file, write header
 	ofstream resultsFile;
 	resultsFile.open(this->outputFolder + "/" + this->inputVideo + "_" + "Results" + ".csv", ios::out | ios::trunc);
-
-	cout << this->outputFolder + "/" + this->inputVideo + "_" + "Results" + ".csv" << endl;
-
 
 	std::string header;
 	header += string("settingsFile") + ";" + "InputVideo" + "; " + "Frame#" + "; " +
@@ -295,7 +292,7 @@ int BossuRainIntensityMeasurer::detectRain()
 			double kalmanR = histSum * kalmanGaussianMixtureProportion;
 
 			resultsFile << 
-				this->currentPath + "/" + this->outputFolder + this->settingsFile + ";" +
+				this->outputFolder + "/" + this->settingsFile + ";" +
 				this->inputVideo + "; " +
 				to_string(frameCounter) + "; " +
 				to_string(gaussianMean) + ";" +
@@ -373,7 +370,6 @@ BossuRainParameters BossuRainIntensityMeasurer::loadParameters(std::string fileP
 int BossuRainIntensityMeasurer::saveParameters(std::string filePath)
 {
 	FileStorage fs(filePath, FileStorage::WRITE);
-	cout << filePath << endl;
 
 	if (fs.isOpened()) {
 		fs << "c" << rainParams.c;
@@ -818,6 +814,7 @@ int main(int argc, char** argv)
 	const string keys =
 		"{help h            |       | Print help message}"
 		"{fileName fn       |       | Input video file to process}"
+		"{filePath fp       |       | Filepath of the input file}"
 		"{outputFolder of   |       | Output folder of processed files}"
 		"{settingsFile sf   |       | File from which settings are loaded/saved}"
 		"{saveSettings s    | 0     | Save settings to settingsFile (0,1)}"	
@@ -842,6 +839,7 @@ int main(int argc, char** argv)
 		cout << argv[i] << endl;
 		
 	std::string filename = cmd.get<std::string>("fileName");
+	std::string filePath = cmd.get<std::string>("filePath");
 	std::string outputFolder = cmd.get<string>("outputFolder");
 	std::string settingsFile = cmd.get<string>("settingsFile");
 
@@ -859,15 +857,7 @@ int main(int argc, char** argv)
 	defaultParams.verbose = cmd.get<int>("verbose") != 0;
 	defaultParams.debug = cmd.get<int>("debug") != 0;
 
-
-	char cCurrentPath[FILENAME_MAX];
-	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-	{
-		return errno;
-	}
-	cout << cCurrentPath << endl;
-
-	BossuRainIntensityMeasurer bossuIntensityMeasurer(cCurrentPath, filename, settingsFile, outputFolder, defaultParams);
+	BossuRainIntensityMeasurer bossuIntensityMeasurer(filename, filePath, settingsFile, outputFolder, defaultParams);
 
 	// Save final settings
 	if (cmd.get<int>("saveSettings") != 0) {
