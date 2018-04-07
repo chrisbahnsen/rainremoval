@@ -33,12 +33,12 @@
 
 #include "BossuRainGauge.h"
 
-
 using namespace std;
 using namespace cv;
 
-BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams)
+BossuRainIntensityMeasurer::BossuRainIntensityMeasurer(std::string currentPath, std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams)
 {
+	this->currentPath = currentPath;
 	this->inputVideo = inputVideo;
 	this->settingsFile = settingsFile;
 	this->outputFolder = outputFolder;
@@ -55,7 +55,10 @@ int BossuRainIntensityMeasurer::detectRain()
 
 	// Create file, write header
 	ofstream resultsFile;
-	resultsFile.open(this->outputFolder + "/" + this->inputVideo + "Results" + ".csv", ios::out | ios::trunc);
+	resultsFile.open(this->outputFolder + "/" + this->inputVideo + "_" + "Results" + ".csv", ios::out | ios::trunc);
+
+	cout << this->outputFolder + "/" + this->inputVideo + "_" + "Results" + ".csv" << endl;
+
 
 	std::string header;
 	header += string("settingsFile") + ";" + "InputVideo" + "; " + "Frame#" + "; " +
@@ -291,11 +294,19 @@ int BossuRainIntensityMeasurer::detectRain()
 			double R = histSum * gaussianMixtureProportion;
 			double kalmanR = histSum * kalmanGaussianMixtureProportion;
 
-			resultsFile << this->settingsFile + ";" + this->inputVideo + "; " + to_string(frameCounter) + "; " +
-				to_string(gaussianMean) + ";" + to_string(gaussianStdDev) + ";" +
-				to_string(gaussianMixtureProportion) + ";" + to_string(ksTest) + ";" +
-				to_string(kalmanGaussianMean) + ";" + to_string(kalmanGaussianStdDev) + ";" +
-				to_string(kalmanGaussianMixtureProportion) + ";" + to_string(R) + ";" + to_string(kalmanR) + "\n";
+			resultsFile << 
+				this->currentPath + "/" + this->outputFolder + this->settingsFile + ";" +
+				this->inputVideo + "; " +
+				to_string(frameCounter) + "; " +
+				to_string(gaussianMean) + ";" +
+				to_string(gaussianStdDev) + ";" +
+				to_string(gaussianMixtureProportion) + ";" +
+				to_string(ksTest) + ";" +
+				to_string(kalmanGaussianMean) + ";" +
+				to_string(kalmanGaussianStdDev) + ";" +
+				to_string(kalmanGaussianMixtureProportion) + ";" +
+				to_string(R) + ";" +
+				to_string(kalmanR) + "\n";
 
 			if (rainParams.verbose)
 				cout << "\n" << endl;
@@ -362,6 +373,7 @@ BossuRainParameters BossuRainIntensityMeasurer::loadParameters(std::string fileP
 int BossuRainIntensityMeasurer::saveParameters(std::string filePath)
 {
 	FileStorage fs(filePath, FileStorage::WRITE);
+	cout << filePath << endl;
 
 	if (fs.isOpened()) {
 		fs << "c" << rainParams.c;
@@ -833,6 +845,9 @@ int main(int argc, char** argv)
 	std::string outputFolder = cmd.get<string>("outputFolder");
 	std::string settingsFile = cmd.get<string>("settingsFile");
 
+	if ((settingsFile == "") && (cmd.get<int>("saveSettings") != 0))
+		settingsFile = filename + "_" + "Settings.txt";
+
 	BossuRainParameters defaultParams = BossuRainIntensityMeasurer::getDefaultParameters();
 
 	if (cmd.has("settingsFile")) {
@@ -844,11 +859,19 @@ int main(int argc, char** argv)
 	defaultParams.verbose = cmd.get<int>("verbose") != 0;
 	defaultParams.debug = cmd.get<int>("debug") != 0;
 
-	BossuRainIntensityMeasurer bossuIntensityMeasurer(filename, settingsFile, outputFolder, defaultParams);
+
+	char cCurrentPath[FILENAME_MAX];
+	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+	{
+		return errno;
+	}
+	cout << cCurrentPath << endl;
+
+	BossuRainIntensityMeasurer bossuIntensityMeasurer(cCurrentPath, filename, settingsFile, outputFolder, defaultParams);
 
 	// Save final settings
-	if (cmd.has("settingsFile") && (cmd.get<int>("saveSettings") != 0)) {
-		bossuIntensityMeasurer.saveParameters(settingsFile);
+	if (cmd.get<int>("saveSettings") != 0) {
+		bossuIntensityMeasurer.saveParameters(outputFolder + "/" + settingsFile);
 	}
 
 	bossuIntensityMeasurer.detectRain();

@@ -73,6 +73,16 @@
 #include <opencv2\opencv.hpp>
 #include <Windows.h>
 
+
+#include <stdio.h>
+#ifdef WIN32 || WIN64
+#include <direct.h>
+#define GetCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define GetCurrentDir getcwd
+#endif
+
 struct BossuRainParameters {
 	// Grey scale threshold from which candidate rain pixels are generated
 	int c;
@@ -105,7 +115,7 @@ struct BossuRainParameters {
 
 class BossuRainIntensityMeasurer {
 public:
-	BossuRainIntensityMeasurer(std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams = BossuRainIntensityMeasurer::getDefaultParameters());
+	BossuRainIntensityMeasurer(std::string currentPath, std::string inputVideo, std::string settingsFile, std::string outputFolder, BossuRainParameters rainParams = BossuRainIntensityMeasurer::getDefaultParameters());
 
 	int detectRain();
 
@@ -143,7 +153,7 @@ private:
 	double gaussianDist(double mean, double stdDev, double pos);
 	
 
-	std::string inputVideo, settingsFile, outputFolder;
+	std::string currentPath, inputVideo, settingsFile, outputFolder;
 
 	BossuRainParameters rainParams;
 };
