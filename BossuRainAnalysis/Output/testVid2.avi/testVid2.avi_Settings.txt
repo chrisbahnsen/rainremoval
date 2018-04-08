@@ -1,0 +1,11 @@
+%YAML:1.0
+c: 3
+minimumBlobSize: 4
+maximumBlobSize: 50
+dm: 1.
+maxGoFDifference: 5.9999998658895493e-02
+minimumGaussianSurface: 3.4999999403953552e-01
+emMaxIterations: 100
+saveImg: 0
+verbose: 0
+debug: 0
