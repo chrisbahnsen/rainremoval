@@ -1,0 +1,36 @@
+﻿Sequence;Published name;Average number of objects per frame;Time of day (24 H);Weather;Estimated precipitation;Estimated temperature (C);Lat ;Long;Start time and date;File name;Time;Events;Note;Time start;Time end;Video sync;Crop sync;;
+Egensevej-Klarupvej;Egensevej-1;3.1;18:00;Light Rain Showers;;5;57.02109;10.01128;10-12-2014 18:00;20141210-18;18:00;Water on lens, RGB lens wet, rain;Good;18:00;18:05;Out of sync;Out of sync;Th. -400 ms;Thermal behind RGB
+Egensevej-Klarupvej;Egensevej-2;3.21;13:03;Snow, Light Rain Showers;;2;57.02109;10.01128;11-12-2014 13:00;20141211-13;13:00;Snow, small stains on RGB lens;Good ;13:03;13:08;Sync verified;Sync verified;;
+Egensevej-Klarupvej;Egensevej-3;4.43;17:00;Rain;;2;57.02109;10.01128;12-12-2014 17:00;20141212-17;17:00;Snow, snowfall;Good, headlights in RGB image;17:00;17:05;Out of sync;Out of sync;Th. -300 ms;
+Egensevej-Klarupvej;Egensevej-4;4.83;18:00;Snow;;1;57.02109;10.01128;12-12-2014 18:00;20141212-18;18:00;Snow, snowy road;Good;18:00;18:05;Out of sync;Out of sync;Th. -500 ms;
+Egensevej-Klarupvej;Egensevej-5;0.28;03:00;Rain;;3;57.02109;10.01128;13-12-2014 03:00;20141213-03;03:00;Snow/rain, both lenses wet;Night;03:00;03:05;Out of sync;Out of sync;Th. -400 ms;
+Hadsundvej-Humlebakken;Hadsundvej-1;6.69;20:06;Thunderstorm;;19;57.033798;9.954256;28-05-2013 20:00;5-28-20;20:06;Rain;;20:06;20:10;Out of sync;Out of sync;Th. -150;
+Hadsundvej-Humlebakken;Hadsundvej-2;16.83;15:23;Light Thunderstorms and Rain;;13;57.033798;9.954256;29-05-2013 15:00;5-29-15;15:23;Heavy rain, thunderstorm;Good ;15:23;15:28;Sync verified;;;
+Hjorringvej-Sundsholmen;Hjorringvej-1;3.48;06:04;Rain;;12;57.069745;9.946788;16-09-2013 06:00;9-16-06;06:00;Rain, reflections;Good ;06:04:15;06:09:15;Sync verified;;;
+Hjorringvej-Sundsholmen;Hjorringvej-2;13.66;16:00;Light rain;;12;57.069745;9.946788;09-10-2013 16:00;10-9-16;16:00;Light rain;;16:00;16:05;Sync verified;;;
+Hjorringvej-Sundsholmen;Hjorringvej-3;6.62;19:12;Rain;;11;57.069745;9.946788;09-10-2013 19:00;10-9-19;19:12;Heavy rain, reflections;Good ;19:12;19:17;Sync verified;;;
+Hjorringvej-Sundsholmen;Hjorringvej-4;6.49;07:00;Light rain;;8;57.069745;9.946788;14-10-2013 07:00;10-14-07;07:00;Heavy rain, reflections;Good ;07:00;07:05;Sync verified;;;
+Hobrovej-NyKaervej;Hobrovej-1;1.63;05:00;Light Rain Showers;;14;57.033472;9.9086;02-09-2013 05:00;9-2-05;05:00;Heavy rain, reflections;;05:00;05:05;Sync verified;;;
+IndreRingvej-Vesterbrogade;Ringvej-1;3.5;20:05;Light rain;;12;56.449713;9.391212;20-10-2013 20:00;10-20-20;20:00;Rain, reflections;Good ;20:05;20:10;Out of sync;;Th. -200 ms;
+IndreRingvej-Vesterbrogade;Ringvej-2;0.86;05:05;Fog;;5;56.449713;9.391212;21-10-2013 05:00;10-21-05;05:00;Fog;Good ;05:05;05:10;Sync verified;;;
+IndreRingvej-Vesterbrogade;Ringvej-3;3.88;17:54;Light Rain Showers;;14;56.449713;9.391212;26-10-2013 17:00;10-26-17;17:54;Rain;;17:54;17:58;Sync verified;;;
+KongChrAlle-Hasserisvej;Hasserisvej-1;4.85;13:12;Rain showers;;11;57.045472;9.903599;16-06-2013 13:00;6-16-13;13:12;Wind, heavy rain;Good ;13:12;13:17;Out of sync;Out of sync;Th -50 ms;Thermal behind RGB
+KongChrAlle-Hasserisvej;Hasserisvej-2;5.75;10:00;Light Rain Showers;;19;57.045472;9.903599;21-06-2013 10:00;6-21-10;10:00;Light rain;  ;10:00;10:05;Out of sync;Out of sync;Th -150 ms behind RGB;
+KongChrAlle-Hasserisvej;Hasserisvej-3;7.58;13:00;Light rain;;19;57.045472;9.903599;21-06-2013 13:00;6-21-13;13:00;Light rain;;13:00;13:00;Sync verified;;;
+OstreAlle-DagHammarskjoldsGade;Ostre-1;2.5;06:10;Rain;;15;57.039288;9.920984;13-06-2013 06:00;6-13-06;06:00;Light rain, small reflections;Good ;06:10;06:15;Out of sync;;Th. +150 ms;
+OstreAlle-DagHammarskjoldsGade;Ostre-2;10.7;10:00;Light Rain Showers;;10;57.039288;9.920984;14-06-2013 10:00;6-14-10;10:00;Rain, water on lens;Good ;10:00;10:05;Sync verified;;;
+OstreAlle-DagHammarskjoldsGade;Ostre-3;4.98;18:00;Thunderstorms and Rain;;11;57.039288;9.920984;15-06-2013 18:00;6-15-18;18:00;Heavy rain, wind;Very good;18:00;18:05;Sync verified;;;
+OstreAlle-DagHammarskjoldsGade;Ostre-4;3.1;19:20;Rain;;10;57.039288;9.920984;04-10-2013 19:00;10-4-19;19:00;Rain, heavy reflections;Good;19:20;19:25;Sync verified;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;

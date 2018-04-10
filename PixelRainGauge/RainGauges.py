@@ -22,12 +22,36 @@
 # SOFTWARE.
 
 import datetime
+from collections import namedtuple
 import math
 import os
+
+def monthToInt(monthName):
+    return {
+        'Jan': 1,
+        'Feb': 2,
+        'Mar': 3,
+        'Apr': 4,
+        'May': 5,
+        'Jun': 6,
+        'Jul': 7,
+        'Aug': 8,
+        'Sep': 9,
+        'Oct': 10,
+        'Nov': 11,
+        'Dec': 12,
+        }.get(monthName, 0) # Invalid month is default
 
 
 def toRadians(number):
     return number * math.pi / 180
+
+class RainMeasurement(object):
+
+    def __init__(self, location):
+        self.location = location
+        self.totalInMm = 0.
+        self.perSecond = {}
 
 class Location(object):
     """Represents a physical location, given by the latitude
@@ -45,28 +69,68 @@ class Location(object):
         # http://www.movable-type.co.uk/scripts/latlong.html
 
         R = 6371e3; # metres
-        φ1 = toRadians(self.lat);
-        φ2 = toRadians(location.lat);
-        Δφ = toRadians(location.lat-self.lat);
-        Δλ = toRadians(location.long-self.long);
+        phi1 = toRadians(self.lat);
+        phi2 = toRadians(location.lat);
+        deltaPhi = toRadians(location.lat-self.lat);
+        deltaLambda = toRadians(location.long-self.long);
 
-        a = (math.sin(Δφ/2) * math.sin(Δφ/2) +
-            math.cos(φ1) * math.cos(φ2) *
-            math.sin(Δλ/2) * math.sin(Δλ/2))
+        a = (math.sin(deltaPhi/2) * math.sin(deltaPhi/2) +
+            math.cos(phi1) * math.cos(phi2) *
+            math.sin(deltaLambda/2) * math.sin(deltaLambda/2))
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
         d = R * c;
+
+        return d
 
 class Recording(object):
     """Represents a rain gauge recording with a
        physical location and start and end time
     """
 
-    def __init__(self, location, startTime, endTime):
+    def __init__(self, location, startTime, endTime, fileName, columnIndex):
         self.location = location
         self.startTime = startTime
         self.endTime = endTime
+        self.fileName = fileName
+        self.columnIndex = columnIndex
 
+    def getPrecipitation(self, startTime, endTime):
+        """ Returns a PrecipitationMeasurements tuple of the rainfall
+            between the startTime and endTime if they are 
+        
+        """
+        if startTime < self.startTime:
+            return None
+        if endTime > self.endTime:
+            return None
+        
+        measurements = RainMeasurement(self.location)
+
+        with open(self.fileName) as f:
+            for line in f:
+                entries = line.split(',')
+
+                if len(entries) > self.columnIndex:
+                    dateTimeSplit = entries[0].split(' ')
+                    
+                    if len(dateTimeSplit) == 2:
+                        dateSplit = dateTimeSplit[0].split('-')
+                        timeSplit = dateTimeSplit[1].split(':')
+                        
+                        if len(dateSplit) == 3 and len(timeSplit) == 3:
+                            dateTime = datetime.datetime(int(dateSplit[0]),
+                                        int(dateSplit[1]), int(dateSplit[2]),
+                                        int(timeSplit[0]), int(timeSplit[1]), 
+                                        int(timeSplit[2]))
+
+                            if dateTime > startTime and dateTime <= endTime:
+                                measurements.totalInMm += float(entries[self.columnIndex])
+
+                                measurements.perSecond[dateTime] = float(entries[self.columnIndex])
+
+        return measurements
+                               
 
 class RainGauges(object):
     """Manages a list of data from real rain gauges 
@@ -74,20 +138,6 @@ class RainGauges(object):
        data from a particular location and time span
         
     """
-
-    def __init__(self, rainGaugeFolder):
-        
-        self.rainGaugeFolder = rainGaugeFolder;
-        self.rainGauges = {}
-
-        self.nearestRainGauge = None;
-
-        self.rainGaugeRecordings = []
-        self.rainGaugeLocations = {}
-
-
-
-        __inspectMeasurementFiles()
 
     def __inspectMeasurementFiles(self):
         """ Inspect the rain measurements in the folder provided in the 
@@ -101,7 +151,7 @@ class RainGauges(object):
         # Get information of the location of the rain gauges
         for file in files:
             if 'GaugeInfo' in file:
-                with open(file) as f:
+                with open(os.path.join(self.rainGaugeFolder, file)) as f:
                     lines = f.readlines()
 
                     for idx in range(1, len(lines)):
@@ -112,11 +162,11 @@ class RainGauges(object):
 
                         id = int(entries[0])
                         name = entries[1]
-                        lat = entries[6]
-                        long = entries[7]
+                        lat = float(entries[6])
+                        long = float(entries[7].replace('\n',''))
 
                         gauge = Location(lat, long, name, id)
-                        self.gaugeLocations[id] = gauge;
+                        self.rainGaugeLocations[id] = gauge;
         
         
         # Get the information of the duration of the rain gauge recordings 
@@ -126,29 +176,22 @@ class RainGauges(object):
                 fileInfoParts = file.split('-');
 
                 if len(fileInfoParts) >= 7:
-                    startTime = datetime.datetime(fileInfoParts[3], fileInfoParts[2], fileInfoParts[1]);
-                    endTime = datetime.datetime(fileInfoParts[6], fileInfoParts[5], fileInfoParts[4]);
+                    startTime = datetime.datetime(int(fileInfoParts[3]), monthToInt(fileInfoParts[2]), int(fileInfoParts[1]));
+                    endTime = datetime.datetime(int(fileInfoParts[6].split('.')[0]), monthToInt(fileInfoParts[5]), int(fileInfoParts[4]));
 
-                    with open(file) as f:
+                    with open(os.path.join(self.rainGaugeFolder, file)) as f:
                         # Just read the first line - it contains the information
                         # we need for now
                         entries = f.readline().split(',')
 
                         if len(entries) > 1:
                             for idx in range(1, len(entries)):
-                                id = entries[idx]
-                                location = self.gaugeLocations[id]
+                                id = int(entries[idx])
+                                location = self.rainGaugeLocations[id]
 
-                                recording = Recording(location, startTime, endTime)  
+                                recording = Recording(location, startTime, endTime, 
+                                            os.path.join(self.rainGaugeFolder, file), idx)  
                                 self.rainGaugeRecordings.append(recording)
-
-
-
-    def __getGaugeInfo(file):
-        with open(file) as f:
-            for line in f:
-                columns = line.split(',')
-
 
     
     def getNearestRainData(self, location, startTime, endTime):
@@ -158,16 +201,32 @@ class RainGauges(object):
         # within the specified start and end time
 
         shortestDistance = 10000; # If we can't find a rain gauge within 10 km, we have failed
-        bestLocation = None
+        bestRecording = None
 
         for recording in self.rainGaugeRecordings:
 
-
             distance = recording.location.measureDistance(location)
-            
 
+            if (distance < shortestDistance 
+                and recording.startTime <= startTime 
+                and recording.endTime >= endTime):
+                shortestDistance = distance
+                bestRecording = recording
 
-        return
+        return bestRecording.getPrecipitation(startTime, endTime)
+
+    def __init__(self, rainGaugeFolder):
+        
+        self.rainGaugeFolder = rainGaugeFolder;
+        self.rainGauges = {}
+
+        self.nearestRainGauge = None;
+
+        self.rainGaugeRecordings = []
+        self.rainGaugeLocations = {}
+
+        self.__inspectMeasurementFiles()
+
 
 
      
