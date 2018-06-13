@@ -1,3 +1,27 @@
+//MIT License
+//
+//Copyright(c) 2018 Aalborg University
+//Chris H. Bahnsen, June 2018
+//
+//Permission is hereby granted, free of charge, to any person obtaining a copy
+//of this software and associated documentation files(the "Software"), to deal
+//in the Software without restriction, including without limitation the rights
+//to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
+//copies of the Software, and to permit persons to whom the Software is
+//furnished to do so, subject to the following conditions :
+//
+//The above copyright notice and this permission notice shall be included in all
+//copies or substantial portions of the Software.
+//
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//SOFTWARE.
+
+
 #include "gargnayar.h"
 
 using namespace std;
@@ -16,6 +40,11 @@ GargNayarRainRemover::GargNayarRainRemover(std::string inputVideo, std::string o
     computeDirectionalMasks(); // Initialise the directional masks
 }
 
+//! Retrieves default parameters as used in the article "Rain Removal in Traffic Surveillance: Does it Matter?"
+/*!
+\return struct of default parameters
+
+*/
 GNRainParameters GargNayarRainRemover::getDefaultParameters()
 {
     GNRainParameters defaultParams;
@@ -36,6 +65,12 @@ GNRainParameters GargNayarRainRemover::getDefaultParameters()
     return defaultParams;
 }
 
+//! Loads parameters saved in a OpenCV FileStorage compatible format
+/*!
+\param filePath load the parameters from this path, either relative or full
+\return struct containing the loaded parameters
+
+*/
 GNRainParameters GargNayarRainRemover::loadParameters(std::string filePath)
 {
     GNRainParameters newParams = getDefaultParameters();
@@ -90,6 +125,12 @@ GNRainParameters GargNayarRainRemover::loadParameters(std::string filePath)
     return newParams;
 }
 
+//! Save current parameters in a OpenCV FileStorage compatible format
+/*!
+\param filePath save the parameters to this path, either relative or full
+\return 0 if the operation was sucessfull, 1 otherwise
+
+*/
 int GargNayarRainRemover::saveParameters(std::string filePath)
 {
     FileStorage fs(filePath, FileStorage::WRITE);
@@ -107,6 +148,8 @@ int GargNayarRainRemover::saveParameters(std::string filePath)
         fs << "saveDiffImg" << rainParams.saveDiffImg;
         fs << "useMedianBlur" << rainParams.useMedianBlur;
         fs << "verbose" << rainParams.verbose;
+
+		return 0;
     }
     else {
         return 1;
@@ -150,11 +193,12 @@ int GargNayarRainRemover::fetchNextImage(cv::VideoCapture &cap, std::map<int, st
         return 1;
     }
 
-    cvtColor(nextImgs[Modality::color][2], nextImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
+    cv::cvtColor(nextImgs[Modality::color][2], nextImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
 
     return 0;
 }
 
+//! The main processing loop of the rain removal algorithm. Operates on the parameters given in rainParams of the class
 int GargNayarRainRemover::removeRain()
 {
     // Open video
@@ -170,43 +214,45 @@ int GargNayarRainRemover::removeRain()
         {
         case GNMethod::fullMethod:
         {
+			// The full method as described in Garg and Nayar in the paper 
+			// "Detection and Removal of Rain from Videos"
             basePath = outputFolder + "/Full";
-            break;
-        }
-        case GNMethod::fullMethodAlternativeST:
-        {
-            basePath = outputFolder + "/FullAltST";
             break;
         }
         case GNMethod::candidatePixels:
         {
+			// We consider all the candidate rain pixels to be rain pixels. 
+			// Conforms to step (a) of Figure 6 in page 5 in the paper
             basePath = outputFolder + "/Candidate/";
             break;
         }
         case GNMethod::photometricConstraint:
         {
+			// We apply the photometric constraint to the candidate pixels
+			// Conforms to step (a) + (b) of Figure 6.
             basePath = outputFolder + "/Photometric/";
             break;
         }
         case GNMethod::correlationMagnitude:
         {
+			// We apply the spatio-temporal correlation magnitude on top of a
+			// collection of detected rain streaks found by the photometric constraint
+			// Conforms to step (a) + (b) + (c) + (d) of Figure 6. 
+			// If we add step (e), the direction of correlation, we will get the full 
+			// method
             basePath = outputFolder + "/STCorr/";
-            break;
-        }
-        case GNMethod::correlationMagnitudeAlternativeST:
-        {
-            basePath = outputFolder + "/STCorrAltST/";
             break;
         }
         case GNMethod::overview:
         {
+			// Produces a neat overview image of the computational steps listed above.
             basePath = outputFolder + "/Overview/";
             break;
         }
         }
     
 
-        if ((method == GNMethod::fullMethod) || (method == GNMethod::fullMethodAlternativeST)) {
+        if (method == GNMethod::fullMethod) {
             // Insert (possibly) different range of rain parameters in the rainImage struct
 
             for (auto minDirCorr : rainParams.minDirectionalCorrelation) {
@@ -270,15 +316,15 @@ int GargNayarRainRemover::removeRain()
         nextImgs[Modality::color].resize(3);
 
         // Convert images to greyscale
-        cap >> prevImgs[Modality::color][2]; cvtColor(prevImgs[Modality::color][2], prevImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
-        cap >> prevImgs[Modality::color][1]; cvtColor(prevImgs[Modality::color][1], prevImgs[Modality::grayscale][1], COLOR_BGR2GRAY);
-        cap >> prevImgs[Modality::color][0]; cvtColor(prevImgs[Modality::color][0], prevImgs[Modality::grayscale][0], COLOR_BGR2GRAY);
-        cap >> currentImg[Modality::color]; cvtColor(currentImg[Modality::color], currentImg[Modality::grayscale], COLOR_BGR2GRAY);
-        cap >> nextImgs[Modality::color][0]; cvtColor(nextImgs[Modality::color][0], nextImgs[Modality::grayscale][0], COLOR_BGR2GRAY);
-        cap >> nextImgs[Modality::color][1]; cvtColor(nextImgs[Modality::color][1], nextImgs[Modality::grayscale][1], COLOR_BGR2GRAY);
-        cap >> nextImgs[Modality::color][2]; cvtColor(nextImgs[Modality::color][2], nextImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
+        cap >> prevImgs[Modality::color][2]; cv::cvtColor(prevImgs[Modality::color][2], prevImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
+        cap >> prevImgs[Modality::color][1]; cv::cvtColor(prevImgs[Modality::color][1], prevImgs[Modality::grayscale][1], COLOR_BGR2GRAY);
+        cap >> prevImgs[Modality::color][0]; cv::cvtColor(prevImgs[Modality::color][0], prevImgs[Modality::grayscale][0], COLOR_BGR2GRAY);
+        cap >> currentImg[Modality::color]; cv::cvtColor(currentImg[Modality::color], currentImg[Modality::grayscale], COLOR_BGR2GRAY);
+        cap >> nextImgs[Modality::color][0]; cv::cvtColor(nextImgs[Modality::color][0], nextImgs[Modality::grayscale][0], COLOR_BGR2GRAY);
+        cap >> nextImgs[Modality::color][1]; cv::cvtColor(nextImgs[Modality::color][1], nextImgs[Modality::grayscale][1], COLOR_BGR2GRAY);
+        cap >> nextImgs[Modality::color][2]; cv::cvtColor(nextImgs[Modality::color][2], nextImgs[Modality::grayscale][2], COLOR_BGR2GRAY);
 
-        deque<Mat> binaryFieldImages, candidatePixelImages, magnitudeImages, magnitudeImagesAlternativeST;
+        deque<Mat> binaryFieldImages, candidatePixelImages, magnitudeImages;
         
         // Process the needed number of frames in order to allow the computation of the spatio-temporal correlation
         for (auto i = 0; i < rainParams.numCorrelationFrames; ++i) {
@@ -305,13 +351,11 @@ int GargNayarRainRemover::removeRain()
         // Process the first five frames outside the great for-loop to populate the next/prev rain
         // images    
         for (auto i = 0; i < (rainParams.numFramesReplacement * 2 + 1); ++i) {
-            Mat candidatePixels, currentMagnitudeImg, currentMagnitudeImgAlternativeST;
+            Mat candidatePixels, currentMagnitudeImg;
 
             computeSTCorrelation(binaryFieldImages, currentMagnitudeImg, GNOptions::STZerothTimeLag);
-            computeSTCorrelation(binaryFieldImages, currentMagnitudeImgAlternativeST, GNOptions::STVaryingTimeLag);
 
             magnitudeImages.push_back(currentMagnitudeImg);
-            magnitudeImagesAlternativeST.push_back(currentMagnitudeImgAlternativeST);
 
             for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
                 for (auto&& param : rainImgs[method]) {
@@ -324,16 +368,10 @@ int GargNayarRainRemover::removeRain()
 
             rainImgs[GNMethod::candidatePixels][0].nextRainImgs[1] = candidatePixelImages.back();
             rainImgs[GNMethod::photometricConstraint][0].nextRainImgs[1] = binaryFieldImages.back();
-            rainImgs[GNMethod::correlationMagnitude][0].nextRainImgs[1] = magnitudeImages.back();
-            rainImgs[GNMethod::correlationMagnitudeAlternativeST][0].nextRainImgs[1] = magnitudeImagesAlternativeST.back();            
+            rainImgs[GNMethod::correlationMagnitude][0].nextRainImgs[1] = magnitudeImages.back();     
 
             for (auto&& param : rainImgs[GNMethod::fullMethod]) {
                 computeCorrelationDirection(currentMagnitudeImg, param.nextRainImgs[1], 
-                    param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
-            }
-
-            for (auto&& param : rainImgs[GNMethod::fullMethodAlternativeST]) {
-                computeCorrelationDirection(currentMagnitudeImgAlternativeST, param.nextRainImgs[1],
                     param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
             }
 
@@ -363,19 +401,15 @@ int GargNayarRainRemover::removeRain()
 			int displayedFrameNumber = i + (rainParams.numFramesReplacement + 1) * 2 + rainParams.numCorrelationFrames;
 			stringstream outFrameNumber;
 			outFrameNumber << setw(5) << setfill('0') << displayedFrameNumber;
-			Mat candidatePixels, currentMagnitudeImg, currentMagnitudeImgAlternativeST;
+			Mat candidatePixels, currentMagnitudeImg;
 			cout << "Processing frame " << outFrameNumber.str() << endl;
 
 			if (!rainParams.noGNProcessing)
 			{
 				computeSTCorrelation(binaryFieldImages, currentMagnitudeImg, GNOptions::STZerothTimeLag);
-				computeSTCorrelation(binaryFieldImages, currentMagnitudeImgAlternativeST, GNOptions::STVaryingTimeLag);
 
 				magnitudeImages.push_back(currentMagnitudeImg);
 				magnitudeImages.pop_front();
-
-				magnitudeImagesAlternativeST.push_back(currentMagnitudeImgAlternativeST);
-				magnitudeImagesAlternativeST.pop_front();
 
 				for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
 					for (auto&& param : rainImgs[method]) {
@@ -389,15 +423,9 @@ int GargNayarRainRemover::removeRain()
 				rainImgs[GNMethod::candidatePixels][0].nextRainImgs[1] = candidatePixelImages.back();
 				rainImgs[GNMethod::photometricConstraint][0].nextRainImgs[1] = binaryFieldImages.back();
 				rainImgs[GNMethod::correlationMagnitude][0].nextRainImgs[1] = magnitudeImages.back();
-				rainImgs[GNMethod::correlationMagnitudeAlternativeST][0].nextRainImgs[1] = magnitudeImagesAlternativeST.back();
 
 				for (auto&& param : rainImgs[GNMethod::fullMethod]) {
 					computeCorrelationDirection(currentMagnitudeImg, param.nextRainImgs[1],
-						param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
-				}
-
-				for (auto&& param : rainImgs[GNMethod::fullMethodAlternativeST]) {
-					computeCorrelationDirection(currentMagnitudeImgAlternativeST, param.nextRainImgs[1],
 						param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
 				}
 
@@ -444,7 +472,7 @@ int GargNayarRainRemover::removeRain()
 
 					Mat upperMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
 					Mat rainRemovedImgGray;
-					cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, CV_BGR2GRAY);
+					cv::cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, CV_BGR2GRAY);
 					rainRemovedImgGray.copyTo(upperMid);
 
 					Mat upperRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
@@ -460,15 +488,6 @@ int GargNayarRainRemover::removeRain()
 					magnitudeImages[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
 					//prevMagnitudeImgs[1].convertTo(lowerRight, CV_8UC1, 100);
 					cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + outFrameNumber.str() + ".png", combinedImg);
-
-					// Alternative ST Method
-					cvtColor(rainRemovedImg[GNMethod::fullMethodAlternativeST], rainRemovedImgGray, CV_BGR2GRAY);
-					rainRemovedImgGray.copyTo(upperMid);
-					rainImgs[GNMethod::fullMethodAlternativeST][0].currentRainImg.convertTo(upperRight, CV_8UC1, 100);
-					candidatePixelImages[candidatePixelImages.size() - 3].copyTo(lowerLeft);
-					binaryFieldImages[binaryFieldImages.size() - 3].copyTo(lowerMid);
-					magnitudeImagesAlternativeST[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
-					cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + "AlternativeST-" + outFrameNumber.str() + ".png", combinedImg);
 				}
 			}
 
@@ -513,7 +532,13 @@ int GargNayarRainRemover::removeRain()
     return 0;
 }
 
-
+//! Find candidate rain pixels from the grayscale input images
+/*!
+\param prevImg previous image, frame n - 1 
+\param currentImg current image, frame n
+\param nextImg next image, frame n + 1
+\param outImg returned image with the found candidate rain pixels
+*/
 void GargNayarRainRemover::findCandidatePixels(cv::Mat prevImg, cv::Mat currentImg, cv::Mat nextImg, cv::Mat &outImg)
 {
     assert(prevImg.size() == currentImg.size());
@@ -541,22 +566,15 @@ void GargNayarRainRemover::findCandidatePixels(cv::Mat prevImg, cv::Mat currentI
     // bright enough to be detected as a rain chandidate.  
     // Mark this in the out image, outImg.at<uchar>(y, x) = 255
     inRange(maskedDiff, rainParams.c, 255, outImg);
-
-    //for (auto x = 0; x < currentImg.cols; ++x) { // Old, cv::Mat based implementation
-    //    for (auto y = 0; y < currentImg.rows; ++y) {
-    //        int prevDiff = currentImg.at<uchar>(y, x) - prevImg.at<uchar>(y, x);
-    //        int nextDiff = currentImg.at<uchar>(y, x) - nextImg.at<uchar>(y, x);
-
-    //        if ((prevDiff == nextDiff) && (prevDiff >= rainParams.c)) {
-    //            // The intensity change just occurs for this frame and is 
-    //            // bright enough to be detected as a rain chandidate. 
-    //            // Mark this in the out image
-    //            outImg.at<uchar>(y, x) = 255;
-    //        }
-    //    }
-    //}
 }
 
+//! Enfore the linear photometric constraint from Garg and Nayar
+/*!
+\param prevImg previous image, frame n - 1
+\param currentImg current image, frame n
+\param nextImg next image, frame n + 1
+\param outImg returned image with the extracted rain streaks
+*/
 void GargNayarRainRemover::enforcePhotometricConstraint(cv::Mat inBinaryImg, cv::Mat prevImg, cv::Mat currentImg, cv::Mat &outImg)
 {
     // Enforce the linear photometric constraint introduced by Garg and Nayar, 2004
@@ -609,17 +627,12 @@ void GargNayarRainRemover::enforcePhotometricConstraint(cv::Mat inBinaryImg, cv:
                 int prevDiff = currentImg.at<uchar>(contours[i][j].y, contours[i][j].x) -
                     prevImg.at<uchar>(contours[i][j].y, contours[i][j].x);
                 deltaI.at<float>(j, 0) = static_cast<float>(prevDiff);
-
-                //cout << "IBg: " << -static_cast<float>(prevImg.at<uchar>(contours[i][j].y, contours[i][j].x)) <<
-                    //"; dI: " << prevDiff << endl;        
             }
 
             // Step 4: Find the best fit
 
             // Compute(A^T A)^(-1) A^T deltaI
             Mat estimate = (A.t() * A).inv() * A.t() * deltaI;
-            //cout << "beta: " << estimate.at<float>(0, 0) << "; alpha: " << estimate.at<float>(1, 0) << "\n" << endl;
-
             float beta = estimate.at<float>(0, 0);
 
             // If the estimated beta is above the threshold, we should discard the current streak.
@@ -643,6 +656,12 @@ void GargNayarRainRemover::enforcePhotometricConstraint(cv::Mat inBinaryImg, cv:
     }
 }
 
+//! Compute the spatio-temporal correlation of a collection of rain streak images
+/*!
+\param binaryFieldHistory extracted rain streaks under the photometric constraint from the previous n frames
+\param outImg filtered rain image (binary) subject to the spatio-temporal correlation of the provided history
+\param method Time lag method. Use GNOptions:STZerothTimeLag to reproduce the original results by Garg and Nayar
+*/
 void GargNayarRainRemover::computeSTCorrelation(std::deque<cv::Mat> binaryFieldHistory, cv::Mat &outImg, int method)
 {
     // Compute the spatio-temporal correlation of the binary field history
@@ -700,6 +719,16 @@ void GargNayarRainRemover::computeSTCorrelation(std::deque<cv::Mat> binaryFieldH
     // is compensated by adjusting the rainParams.minDirectionalCorrelation accordingly
 }
 
+
+//! Compute the directional correlation of the spatio-temporal correlation. This will exclude non-streak-like rain streaks
+/*!
+Prior to calling this method, the directional masks should have been generated by calling computeDirectionalMasks()
+
+\param ingImg binary image as output by computeSTCorrelation
+\param outImg filtered rain image
+\param minDirectionalCorrelation a rain pixel should have a directional correlation over this threshold in order to remain a rain streak
+\param maxDirectionalSpread the directional correlation of a rain pixel should not vary more than this threshold
+*/
 void GargNayarRainRemover::computeCorrelationDirection(cv::Mat inImg, cv::Mat &outImg, 
     float minDirectionalCorrelation, int maxDirectionalSpread)
 {
@@ -788,6 +817,7 @@ void GargNayarRainRemover::computeCorrelationDirection(cv::Mat inImg, cv::Mat &o
     
 }
 
+//! Compute the directional masks. 
 void GargNayarRainRemover::computeDirectionalMasks()
 {
     // Construct 18 (the paper says 17, but the range from {0, 10, ... 170} indicates that we need 18)
@@ -807,12 +837,14 @@ void GargNayarRainRemover::computeDirectionalMasks()
     }
 }
 
+//! Remove rain from the current image if rain is detected using the current rain image. 
+//! If there is rain detected at a pixel in the current rain image, look at the previous and next rain image. 
+//! If there is no rain in these, use the averaged values
+//! of these images to replace the rain-affected pixel.
 void GargNayarRainRemover::removeDetectedRain(std::vector<cv::Mat> prevImgs, cv::Mat currentImg, std::vector<cv::Mat> nextImgs, 
     GNRainImage rainImage, cv::Mat &rainRemovedCurrentImg)
 {
-    // Remove rain from the current image if rain is detected using the current rain image. 
-    // If there is rain detected at a pixel in the current rain image, look at the previous and next rain image. If there is no rain in these, use the averaged values
-    // of these images to replace the rain-affected pixel.
+
 
     assert(prevImgs.size() == nextImgs.size() && rainImage.prevRainImgs.size() == rainImage.nextRainImgs.size());
 
@@ -917,6 +949,7 @@ int main(int argc, char** argv)
         ;
 
     cv::CommandLineParser cmd(argc, argv, keys);
+	cmd.about("Reimplementation of the method from Garg and Nayar in \"Detection and Removal of Rain From Videos\".");
 
     if (argc <= 1 || (cmd.has("help"))) {
         std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
