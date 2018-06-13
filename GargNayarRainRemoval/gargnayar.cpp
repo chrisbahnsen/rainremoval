@@ -31,6 +31,7 @@ GNRainParameters GargNayarRainRemover::getDefaultParameters()
     defaultParams.saveDiffImg = false;
     defaultParams.saveOverviewImg = false;
     defaultParams.useMedianBlur = false;
+	defaultParams.noGNProcessing = false;
 
     return defaultParams;
 }
@@ -358,118 +359,118 @@ int GargNayarRainRemover::removeRain()
 
         // We now have enough processed images to remove the rain from the frames
 
-        for (auto i = 0; i < (numImages - rainParams.numCorrelationFrames- (rainParams.numFramesReplacement * 2 + 1)); ++i) {
+		for (auto i = 0; i < (numImages - rainParams.numCorrelationFrames - (rainParams.numFramesReplacement * 2 + 1)); ++i) {
+			int displayedFrameNumber = i + (rainParams.numFramesReplacement + 1) * 2 + rainParams.numCorrelationFrames;
+			stringstream outFrameNumber;
+			outFrameNumber << setw(5) << setfill('0') << displayedFrameNumber;
+			Mat candidatePixels, currentMagnitudeImg, currentMagnitudeImgAlternativeST;
+			cout << "Processing frame " << outFrameNumber.str() << endl;
 
-            int displayedFrameNumber = i + (rainParams.numFramesReplacement+1)*2 + rainParams.numCorrelationFrames;
-            stringstream outFrameNumber;
-            outFrameNumber << setw(5) << setfill('0') << displayedFrameNumber;
+			if (!rainParams.noGNProcessing)
+			{
+				computeSTCorrelation(binaryFieldImages, currentMagnitudeImg, GNOptions::STZerothTimeLag);
+				computeSTCorrelation(binaryFieldImages, currentMagnitudeImgAlternativeST, GNOptions::STVaryingTimeLag);
 
-            cout << "Processing frame " << outFrameNumber.str() << endl;
+				magnitudeImages.push_back(currentMagnitudeImg);
+				magnitudeImages.pop_front();
 
-            Mat candidatePixels, currentMagnitudeImg, currentMagnitudeImgAlternativeST;
+				magnitudeImagesAlternativeST.push_back(currentMagnitudeImgAlternativeST);
+				magnitudeImagesAlternativeST.pop_front();
 
-            computeSTCorrelation(binaryFieldImages, currentMagnitudeImg, GNOptions::STZerothTimeLag);
-            computeSTCorrelation(binaryFieldImages, currentMagnitudeImgAlternativeST, GNOptions::STVaryingTimeLag);
+				for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
+					for (auto&& param : rainImgs[method]) {
+						param.prevRainImgs[1] = param.prevRainImgs[0].clone();
+						param.prevRainImgs[0] = param.currentRainImg.clone();
+						param.currentRainImg = param.nextRainImgs[0].clone();
+						param.nextRainImgs[0] = param.nextRainImgs[1].clone();
+					}
+				}
 
-            magnitudeImages.push_back(currentMagnitudeImg);
-            magnitudeImages.pop_front();
+				rainImgs[GNMethod::candidatePixels][0].nextRainImgs[1] = candidatePixelImages.back();
+				rainImgs[GNMethod::photometricConstraint][0].nextRainImgs[1] = binaryFieldImages.back();
+				rainImgs[GNMethod::correlationMagnitude][0].nextRainImgs[1] = magnitudeImages.back();
+				rainImgs[GNMethod::correlationMagnitudeAlternativeST][0].nextRainImgs[1] = magnitudeImagesAlternativeST.back();
 
-            magnitudeImagesAlternativeST.push_back(currentMagnitudeImgAlternativeST);
-            magnitudeImagesAlternativeST.pop_front();
+				for (auto&& param : rainImgs[GNMethod::fullMethod]) {
+					computeCorrelationDirection(currentMagnitudeImg, param.nextRainImgs[1],
+						param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
+				}
 
-            for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
-                for (auto&& param : rainImgs[method]) {
-                    param.prevRainImgs[1] = param.prevRainImgs[0].clone();
-                    param.prevRainImgs[0] = param.currentRainImg.clone();
-                    param.currentRainImg = param.nextRainImgs[0].clone();
-                    param.nextRainImgs[0] = param.nextRainImgs[1].clone();
-                }
-            }
+				for (auto&& param : rainImgs[GNMethod::fullMethodAlternativeST]) {
+					computeCorrelationDirection(currentMagnitudeImgAlternativeST, param.nextRainImgs[1],
+						param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
+				}
 
-            rainImgs[GNMethod::candidatePixels][0].nextRainImgs[1] = candidatePixelImages.back();
-            rainImgs[GNMethod::photometricConstraint][0].nextRainImgs[1] = binaryFieldImages.back();
-            rainImgs[GNMethod::correlationMagnitude][0].nextRainImgs[1] = magnitudeImages.back();
-            rainImgs[GNMethod::correlationMagnitudeAlternativeST][0].nextRainImgs[1] = magnitudeImagesAlternativeST.back();
+				// Remove detected rain. In order to remove the rain from the image, we require 
+				// that rain has been detected in: frame-2, frame-1, frame, frame+1, frame+2, 
+				// or more/less controlled by the numFramesReplacement parameter.
+				// If numFramesReplacement != 2 however, the code below must be changed to 
+				// copy the vectors accordingly
+				// 
+				// The mapping between the images and the rain images is the following:
+				// currentImage: nextRainImgs[1]
+				// prevImgs[0]: nextRainImgs[0]
+				// prevImgs[1]: currentRainImg
+				// prevImgs[2]: prevRainImgs[0]or
+				// prevImgs[3]: prevRainImgs[1]
+				// We must remap the images accordingly in order to remove the rain
 
-            for (auto&& param : rainImgs[GNMethod::fullMethod]) {
-                computeCorrelationDirection(currentMagnitudeImg, param.nextRainImgs[1],
-                    param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
-            }
+				std::vector<Mat> tmpPrevImgs, tmpNextImgs;
+				tmpPrevImgs.push_back(prevImgs[Modality::color][2]);
+				tmpPrevImgs.push_back(prevImgs[Modality::color][3]);
+				tmpNextImgs.push_back(prevImgs[Modality::color][0]);
+				tmpNextImgs.push_back(prevImgs[Modality::color][1]);
+				map<int, Mat> rainRemovedImg;
 
-            for (auto&& param : rainImgs[GNMethod::fullMethodAlternativeST]) {
-                computeCorrelationDirection(currentMagnitudeImgAlternativeST, param.nextRainImgs[1],
-                    param.customParams.minDirectionalCorrelation[0], param.customParams.maxDirectionalSpread[0]);
-            }
+				// Remove detected rain by using the full method, candidatePixels, magnitudeImages, and photometric constraint
+				for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
+					for (auto&& param : rainImgs[method]) {
+						removeDetectedRain(tmpPrevImgs, prevImgs[Modality::color][1], tmpNextImgs, param, rainRemovedImg[method]);
+						cv::imwrite(param.outputFolder + outFrameNumber.str() + ".png", rainRemovedImg[method]);
 
-            // Remove detected rain. In order to remove the rain from the image, we require 
-            // that rain has been detected in: frame-2, frame-1, frame, frame+1, frame+2, 
-            // or more/less controlled by the numFramesReplacement parameter.
-            // If numFramesReplacement != 2 however, the code below must be changed to 
-            // copy the vectors accordingly
-            // 
-            // The mapping between the images and the rain images is the following:
-            // currentImage: nextRainImgs[1]
-            // prevImgs[0]: nextRainImgs[0]
-            // prevImgs[1]: currentRainImg
-            // prevImgs[2]: prevRainImgs[0]or
-            // prevImgs[3]: prevRainImgs[1]
-            // We must remap the images accordingly in order to remove the rain
+						if (rainParams.saveDiffImg && (method != GNMethod::fullMethod)) {
+							// Compute difference image of intermediate output
+							Mat diff;
+							absdiff(rainRemovedImg[GNMethod::fullMethod], rainRemovedImg[method], diff);
+							cv::imwrite(param.outputFolder + "diff-" + outFrameNumber.str() + ".png", diff * 255);
+						}
+					}
+				}
 
-            std::vector<Mat> tmpPrevImgs, tmpNextImgs;
-            tmpPrevImgs.push_back(prevImgs[Modality::color][2]);
-            tmpPrevImgs.push_back(prevImgs[Modality::color][3]);
-            tmpNextImgs.push_back(prevImgs[Modality::color][0]);
-            tmpNextImgs.push_back(prevImgs[Modality::color][1]);
-            map<int, Mat> rainRemovedImg;
-            
-            // Remove detected rain by using the full method, candidatePixels, magnitudeImages, and photometric constraint
-            for (int method = GNMethod::fullMethod; method <= GNMethod::correlationMagnitude; ++method) {
-                for (auto&& param : rainImgs[method]) {
-                    removeDetectedRain(tmpPrevImgs, prevImgs[Modality::color][1], tmpNextImgs, param, rainRemovedImg[method]);
-                    cv::imwrite(param.outputFolder + outFrameNumber.str() + ".png", rainRemovedImg[method]);
+				if (rainParams.saveOverviewImg) {
+					Mat combinedImg = Mat(Size(currentImg[Modality::grayscale].cols * 3, currentImg[Modality::grayscale].rows * 2), currentImg[Modality::grayscale].type()); // CV_8UC1
+					Mat upperLeft(combinedImg, Rect(0, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					prevImgs[Modality::grayscale][1].copyTo(upperLeft);
 
-                    if (rainParams.saveDiffImg && (method != GNMethod::fullMethod)) {
-                        // Compute difference image of intermediate output
-                        Mat diff;
-                        absdiff(rainRemovedImg[GNMethod::fullMethod], rainRemovedImg[method], diff);
-                        cv::imwrite(param.outputFolder + "diff-" + outFrameNumber.str() + ".png", diff * 255);
-                    }
-                }
-            }
+					Mat upperMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					Mat rainRemovedImgGray;
+					cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, CV_BGR2GRAY);
+					rainRemovedImgGray.copyTo(upperMid);
 
-            if (rainParams.saveOverviewImg) {
-                Mat combinedImg = Mat(Size(currentImg[Modality::grayscale].cols * 3, currentImg[Modality::grayscale].rows * 2), currentImg[Modality::grayscale].type()); // CV_8UC1
-                Mat upperLeft(combinedImg, Rect(0, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                prevImgs[Modality::grayscale][1].copyTo(upperLeft);
+					Mat upperRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					rainImgs[GNMethod::fullMethod][0].currentRainImg.convertTo(upperRight, CV_8UC1, 100);
 
-                Mat upperMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                Mat rainRemovedImgGray;
-                cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, CV_BGR2GRAY);
-                rainRemovedImgGray.copyTo(upperMid);
+					Mat lowerLeft(combinedImg, Rect(0, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					candidatePixelImages[candidatePixelImages.size() - 3].copyTo(lowerLeft);
 
-                Mat upperRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                rainImgs[GNMethod::fullMethod][0].currentRainImg.convertTo(upperRight, CV_8UC1, 100);
+					Mat lowerMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					binaryFieldImages[binaryFieldImages.size() - 3].copyTo(lowerMid);
 
-                Mat lowerLeft(combinedImg, Rect(0, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                candidatePixelImages[candidatePixelImages.size() - 3].copyTo(lowerLeft);
+					Mat lowerRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
+					magnitudeImages[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
+					//prevMagnitudeImgs[1].convertTo(lowerRight, CV_8UC1, 100);
+					cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + outFrameNumber.str() + ".png", combinedImg);
 
-                Mat lowerMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                binaryFieldImages[binaryFieldImages.size() - 3].copyTo(lowerMid);
-
-                Mat lowerRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, currentImg[Modality::grayscale].rows, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
-                magnitudeImages[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
-                //prevMagnitudeImgs[1].convertTo(lowerRight, CV_8UC1, 100);
-                cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + outFrameNumber.str() + ".png", combinedImg);
-
-                // Alternative ST Method
-                cvtColor(rainRemovedImg[GNMethod::fullMethodAlternativeST], rainRemovedImgGray, CV_BGR2GRAY);
-                rainRemovedImgGray.copyTo(upperMid);
-                rainImgs[GNMethod::fullMethodAlternativeST][0].currentRainImg.convertTo(upperRight, CV_8UC1, 100);
-                candidatePixelImages[candidatePixelImages.size() - 3].copyTo(lowerLeft);
-                binaryFieldImages[binaryFieldImages.size() - 3].copyTo(lowerMid);
-                magnitudeImagesAlternativeST[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
-                cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + "AlternativeST-" + outFrameNumber.str() + ".png", combinedImg);
-            }
+					// Alternative ST Method
+					cvtColor(rainRemovedImg[GNMethod::fullMethodAlternativeST], rainRemovedImgGray, CV_BGR2GRAY);
+					rainRemovedImgGray.copyTo(upperMid);
+					rainImgs[GNMethod::fullMethodAlternativeST][0].currentRainImg.convertTo(upperRight, CV_8UC1, 100);
+					candidatePixelImages[candidatePixelImages.size() - 3].copyTo(lowerLeft);
+					binaryFieldImages[binaryFieldImages.size() - 3].copyTo(lowerMid);
+					magnitudeImagesAlternativeST[magnitudeImages.size() - 3].convertTo(lowerRight, CV_8UC1, 100);
+					cv::imwrite(rainImgs[GNMethod::overview][0].outputFolder + "AlternativeST-" + outFrameNumber.str() + ".png", combinedImg);
+				}
+			}
 
             if (rainParams.useMedianBlur) {
                 Mat medBlur;
@@ -485,19 +486,22 @@ int GargNayarRainRemover::removeRain()
                 return 0;
             }
 
-            Mat binaryField;
+			if (!rainParams.noGNProcessing)
+			{
+				Mat binaryField;
 
-            findCandidatePixels(prevImgs[Modality::grayscale][0], currentImg[Modality::grayscale], nextImgs[Modality::grayscale][0], candidatePixels);
-            candidatePixelImages.push_back(candidatePixels);
-            candidatePixelImages.pop_front();
+				findCandidatePixels(prevImgs[Modality::grayscale][0], currentImg[Modality::grayscale], nextImgs[Modality::grayscale][0], candidatePixels);
+				candidatePixelImages.push_back(candidatePixels);
+				candidatePixelImages.pop_front();
 
-            //imwrite("Out/CandidatePixels-" + std::to_string(i + 1 + rainParams.numCorrelationFrames) + ".png", candidatePixels);
+				//imwrite("Out/CandidatePixels-" + std::to_string(i + 1 + rainParams.numCorrelationFrames) + ".png", candidatePixels);
 
-            enforcePhotometricConstraint(candidatePixels, prevImgs[Modality::grayscale][0], currentImg[Modality::grayscale], binaryField);
-            //imwrite("Out/PConstraint-" + std::to_string(i + 1 + rainParams.numCorrelationFrames) + ".png", binaryField);
+				enforcePhotometricConstraint(candidatePixels, prevImgs[Modality::grayscale][0], currentImg[Modality::grayscale], binaryField);
+				//imwrite("Out/PConstraint-" + std::to_string(i + 1 + rainParams.numCorrelationFrames) + ".png", binaryField);
 
-            binaryFieldImages.push_back(binaryField);
-            binaryFieldImages.pop_front();
+				binaryFieldImages.push_back(binaryField);
+				binaryFieldImages.pop_front();
+			}
         }
 
     }
@@ -908,6 +912,7 @@ int main(int argc, char** argv)
         "{overviewImg oi    | 0     | Generate overview images of deraining process (0,1)}"
         "{diffImg di        | 0     | Generate difference frames from intermediate steps of algorithm (0,1)}"
         "{medianBlur mb     | 0     | Generate derained frames using basic mean blur (3x3 kernel) (0,1)}"
+		"{noGNProcessing    | 0     | Disables the entire Garg-Nayar processing and only allows median blur (0,1)}"
         "{verbose v         | 0     | Write additional debug information to console (0,1)}"
         ;
 
@@ -934,6 +939,8 @@ int main(int argc, char** argv)
     defaultParams.useMedianBlur = cmd.get<int>("medianBlur") != 0;
     defaultParams.saveDiffImg = cmd.get<int>("diffImg") != 0;
     defaultParams.verbose = cmd.get<int>("verbose") != 0;
+	defaultParams.noGNProcessing = cmd.get<int>("noGNProcessing") != 0;
+	
 
     GargNayarRainRemover gNRainRemover(filename, outputFolder, defaultParams);
 

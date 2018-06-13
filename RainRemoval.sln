@@ -56,7 +56,6 @@ Global
 		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Debug|x86.Build.0 = Debug|Win32
 		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Release|Any CPU.ActiveCfg = Release|Win32
 		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Release|x64.ActiveCfg = Release|x64
-		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Release|x64.Build.0 = Release|x64
 		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Release|x86.ActiveCfg = Release|Win32
 		{382812B5-64DC-4560-A36A-2EB7CA1EC588}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection

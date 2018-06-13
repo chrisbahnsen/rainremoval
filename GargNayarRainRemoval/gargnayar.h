@@ -69,6 +69,7 @@ struct GNRainParameters
     bool saveDiffImg;
     bool useMedianBlur;
     bool verbose;
+	bool noGNProcessing;
 
 };
 
