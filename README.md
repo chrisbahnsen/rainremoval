@@ -2,6 +2,7 @@
 ---
 
 This is the source code of the reimplementation of the rain removal algorithm from Garg and Nayar as described in their paper ["Detection and Removal of Rain from Videos"](ieeexplore.ieee.org/abstract/document/1315077/). 
+Please refer to the source files located at GargNayarRainRemoval/gargnayar.cpp for a full documentation of the approach. The file is commented, no worries.
 
 
 ### Download
