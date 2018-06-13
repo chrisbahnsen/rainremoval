@@ -1,12 +1,13 @@
-## Reimplementation of the method from Garg and Nayar in "Detection and Removal of Rain From Videos
+## Reimplementation of the Garg/Nayar rain removal algorithm
 ---
 
-This is the source code of the reimplementation of the rain removal algorithm from Garg and Nayar. 
+This is the source code of the reimplementation of the rain removal algorithm from Garg and Nayar as described in their paper ["Detection and Removal of Rain from Videos"](ieeexplore.ieee.org/abstract/document/1315077/). 
 
 
 ### Download
-Windows binaries are available from the downloads section. https://bitbucket.org/aauvap/rainremoval/downloads/
-Open the file GargNayarRainRemoval from the command line and see the available options.
+Windows binaries are available from the [downloads section](https://bitbucket.org/aauvap/rainremoval/downloads/).
+
+Open the file GargNayarRainRemoval.exe from the command line and see the available options.
 
 
 ### Compilation
@@ -17,4 +18,4 @@ On Unix, you should compile the file gargnayar.cpp.
 
 
 ### Who do I talk to?
-* Chris H. Bahnsen at cb@create.aau.dk
+Chris H. Bahnsen at cb@create.aau.dk
