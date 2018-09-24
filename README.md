@@ -1,7 +1,7 @@
 ## Reimplementation of the Garg/Nayar rain removal algorithm
 ---
 
-This is the source code of the reimplementation of the rain removal algorithm from Garg and Nayar as described in their paper ["Detection and Removal of Rain from Videos"](ieeexplore.ieee.org/abstract/document/1315077/). 
+This is the source code of the reimplementation of the rain removal algorithm from Garg and Nayar as described in their paper ["Detection and Removal of Rain from Videos"](https://ieeexplore.ieee.org/abstract/document/1315077/). 
 Please refer to the source files located at GargNayarRainRemoval/gargnayar.cpp for a full documentation of the approach. The file is commented, no worries.
 
 ### The method at a glance
@@ -11,6 +11,11 @@ Please refer to the source files located at GargNayarRainRemoval/gargnayar.cpp f
 Windows binaries are available from the [downloads section](https://bitbucket.org/aauvap/rainremoval/downloads/).
 
 Open the file GargNayarRainRemoval.exe from the command line and see the available options.
+
+### Other rain removal algorithms
+
+* **Kang et al, 2012**: [Automatic single-image-based rain streaks removal via image decomposition](http://www.ee.nthu.edu.tw/cwlin/Rain_Removal/Rain_Removal.htm)
+* **Kim et al, 2015**: [Video Deraining and Desnowing Using Temporal Correlation and Low-Rank Matrix Completion (currently unavailable](http://mcl.korea.ac.kr/deraining/)
 
 
 ### Compilation
