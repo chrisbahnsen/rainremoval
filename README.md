@@ -35,3 +35,18 @@ On Unix, you should compile the file gargnayar.cpp.
 
 ### Who do I talk to?
 Chris H. Bahnsen at cb@create.aau.dk
+
+### Acknowledgements
+Please cite the following paper if you use our reimplementation:
+
+```TeX
+@article{bahnsen2018rain,
+  title={Rain Removal in Traffic Surveillance: Does it Matter?},
+  author={Bahnsen, Chris H. and Moeslund, Thomas B.},
+  journal={IEEE Transactions on Intelligent Transportation Systems},
+  year={2018},
+  publisher={IEEE},
+  doi={10.1109/TITS.2018.2872502},
+  pages={1--18}
+}
+```
