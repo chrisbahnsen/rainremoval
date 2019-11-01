@@ -472,7 +472,7 @@ int GargNayarRainRemover::removeRain()
 
 					Mat upperMid(combinedImg, Rect(currentImg[Modality::grayscale].cols, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
 					Mat rainRemovedImgGray;
-					cv::cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, CV_BGR2GRAY);
+					cv::cvtColor(rainRemovedImg[GNMethod::fullMethod], rainRemovedImgGray, cv::COLOR_BGR2GRAY);
 					rainRemovedImgGray.copyTo(upperMid);
 
 					Mat upperRight(combinedImg, Rect(currentImg[Modality::grayscale].cols * 2, 0, currentImg[Modality::grayscale].cols, currentImg[Modality::grayscale].rows));
@@ -982,12 +982,5 @@ int main(int argc, char** argv)
         gNRainRemover.saveParameters(cmd.get<std::string>("settingsFile"));
     }
 
-    gNRainRemover.removeRain();    
-
-    //std::string filename = "C:/Code/Video/RainSnow/OstreAlle-DagHammerskjoldsGade/20130613-06-10-00-cam1.mkv";
-    //std::string outputFolder = "D:/RainSnow/RainRemoval/OstreAlle-DagHammerskjoldsGade/RainRemoval/0613-06-10-00/GargNayar/";
-
-    
-
-
+    gNRainRemover.removeRain();   
 }
